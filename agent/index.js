@@ -19,22 +19,34 @@ async function setJobStatus(jobId, status) {
   await supabase.from('research_jobs').update(update).eq('id', jobId);
 }
 
-async function getOrPromptProductDescription() {
-  // Check config table for our product description
+/**
+ * Fetch all four product config keys from Supabase.
+ * Returns an object: { company_name, company_url, product_name, product_description }
+ */
+async function getProductConfig() {
   const { data } = await supabase
     .from('config')
-    .select('value')
-    .eq('key', 'product_description')
-    .maybeSingle();
-  return data?.value || null;
+    .select('key, value')
+    .in('key', ['company_name', 'company_url', 'product_name', 'product_description']);
+
+  if (!data || data.length === 0) return {};
+  return Object.fromEntries(data.map((d) => [d.key, d.value]));
 }
 
-// ─── main research prompt ────────────────────────────────────────────────────
+// ─── prompts ─────────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(productDescription) {
-  const ourProduct = productDescription
-    ? `\n\nOUR PRODUCT DESCRIPTION:\n${productDescription}`
-    : '\n\nOUR PRODUCT: (no description provided — use general competitive analysis perspective)';
+function buildSystemPrompt(config) {
+  const { company_name, company_url, product_name, product_description } = config;
+
+  let ourProduct = '\n\nOUR PRODUCT: (no product details provided — use a general competitive analysis perspective)';
+
+  if (company_name || product_name || product_description) {
+    ourProduct = '\n\nOUR PRODUCT CONTEXT:';
+    if (company_name) ourProduct += `\n- Company: ${company_name}`;
+    if (company_url)  ourProduct += `\n- Website: ${company_url}`;
+    if (product_name) ourProduct += `\n- Product name: ${product_name}`;
+    if (product_description) ourProduct += `\n- Description: ${product_description}`;
+  }
 
   return `You are a competitive intelligence analyst. Your job is to research competitors thoroughly using web search and synthesize findings into structured JSON.${ourProduct}
 
@@ -45,7 +57,15 @@ IMPORTANT RULES:
 - Use web_search to look up real, current information. Do NOT hallucinate.`;
 }
 
-function buildResearchPrompt(competitorName) {
+function buildResearchPrompt(competitorName, config) {
+  const { company_name, product_name } = config;
+
+  // Use product name if available, fall back to company name, then generic "Us"
+  const ourLabel = product_name || company_name || 'Us';
+  const ourContext = product_name && company_name
+    ? `${product_name} by ${company_name}`
+    : product_name || company_name || 'our product';
+
   return `Research the competitor "${competitorName}" thoroughly. Search for:
 1. Their homepage and about page
 2. Pricing page
@@ -56,18 +76,21 @@ function buildResearchPrompt(competitorName) {
 7. Reddit and Hacker News discussions
 8. SEC filings (if they appear to be a public company)
 
-After gathering all information, return a single JSON object with EXACTLY these four top-level keys:
+After gathering all information, return a single JSON object with EXACTLY these four top-level keys.
+
+IMPORTANT for head_to_head: the "us" column represents ${ourContext}. Make comparisons specific to our actual product capabilities — do not be generic.
+IMPORTANT for battle_card: objection handling and landmines should be specific to winning deals against ${competitorName} when selling ${ourContext}.
 
 {
   "battle_card": {
-    "positioning": "string — how they position themselves in the market",
+    "positioning": "string — how ${competitorName} positions itself in the market",
     "pricing": "string — pricing model, tiers, and approximate costs",
     "strengths": ["array", "of", "strings"],
     "weaknesses": ["array", "of", "strings"],
     "objection_handling": [
-      { "objection": "string", "response": "string" }
+      { "objection": "string — a common objection when prospects prefer ${competitorName}", "response": "string — how to counter it when selling ${ourContext}" }
     ],
-    "landmines": ["things to watch out for or avoid saying in competitive deals"]
+    "landmines": ["things to watch out for or avoid saying when competing against ${competitorName}"]
   },
   "competitive_triggers": {
     "recent_funding": [{ "date": "YYYY-MM-DD or null", "summary": "string" }],
@@ -77,12 +100,12 @@ After gathering all information, return a single JSON object with EXACTLY these 
     "bad_press": [{ "date": "YYYY-MM-DD or null", "summary": "string" }]
   },
   "head_to_head": {
-    "summary": "string — 2-3 sentence overall comparison",
+    "summary": "string — 2-3 sentence overall comparison of ${ourContext} vs ${competitorName}",
     "feature_matrix": [
       {
         "feature": "string",
-        "us": "string — our capability",
-        "them": "string — their capability",
+        "us": "string — capability of ${ourLabel}",
+        "them": "string — capability of ${competitorName}",
         "advantage": "us | them | neutral"
       }
     ]
@@ -136,16 +159,16 @@ async function runResearch(competitorName, jobId) {
   if (!job) throw new Error('Job not found: ' + jobId);
   const competitorId = job.competitor_id;
 
-  // Get product description (may be null)
-  const productDescription = await getOrPromptProductDescription();
+  // Fetch all product config values
+  const productConfig = await getProductConfig();
+  console.log(`[${jobId}] Product config:`, JSON.stringify(productConfig));
 
-  // Run Claude with web_search tool
-  console.log(`[${jobId}] Calling Claude...`);
-
+  // Build initial messages
   const messages = [
-    { role: 'user', content: buildResearchPrompt(competitorName) },
+    { role: 'user', content: buildResearchPrompt(competitorName, productConfig) },
   ];
 
+  console.log(`[${jobId}] Calling Claude...`);
   let finalText = '';
 
   // Agentic loop — Claude may call web_search multiple times
@@ -154,7 +177,7 @@ async function runResearch(competitorName, jobId) {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8192,
-      system: buildSystemPrompt(productDescription),
+      system: buildSystemPrompt(productConfig),
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages,
     });
@@ -163,36 +186,25 @@ async function runResearch(competitorName, jobId) {
     messages.push({ role: 'assistant', content: response.content });
 
     if (response.stop_reason === 'end_turn') {
-      // Extract final text
       for (const block of response.content) {
         if (block.type === 'text') finalText += block.text;
       }
       continueLoop = false;
     } else if (response.stop_reason === 'tool_use') {
-      // Process tool uses
       const toolResults = [];
       for (const block of response.content) {
         if (block.type !== 'tool_use') continue;
-
         console.log(`[${jobId}] Tool call: ${block.name}(${JSON.stringify(block.input).slice(0, 120)})`);
-
-        // Add small delay between searches
-        await delay(1500);
-
-        // The web_search tool is handled natively by Anthropic's API —
-        // we just need to push the tool_result back.
-        // For native tools, the result is already included in the response stream,
-        // but the API pattern requires us to echo it back.
+        await delay(1500); // rate-limit courtesy delay
         toolResults.push({
           type: 'tool_result',
           tool_use_id: block.id,
           content: 'Search executed.',
         });
       }
-
       messages.push({ role: 'user', content: toolResults });
     } else {
-      // max_tokens or other stop — try to extract partial text
+      // max_tokens or other stop — extract partial text
       for (const block of response.content) {
         if (block.type === 'text') finalText += block.text;
       }
@@ -202,10 +214,9 @@ async function runResearch(competitorName, jobId) {
 
   console.log(`[${jobId}] Claude finished. Parsing output...`);
 
-  // Parse JSON from Claude's response
+  // Parse JSON — strip accidental markdown fences if present
   let parsed;
   try {
-    // Strip any accidental markdown fences
     const clean = finalText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     parsed = JSON.parse(clean);
   } catch (err) {
@@ -240,9 +251,10 @@ function delay(ms) {
 
 // ─── /api/config ─────────────────────────────────────────────────────────────
 
+// Legacy endpoint kept for backwards compat — new config is written directly from frontend
 app.get('/api/config/product-description', async (req, res) => {
-  const desc = await getOrPromptProductDescription();
-  res.json({ product_description: desc });
+  const config = await getProductConfig();
+  res.json({ product_description: config.product_description || null });
 });
 
 app.post('/api/config/product-description', async (req, res) => {
