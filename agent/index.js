@@ -59,11 +59,19 @@ function buildSystemPrompt(config) {
 
   return `You are a competitive intelligence analyst. Your job is to research competitors thoroughly using web search and synthesize findings into structured JSON.${ourProduct}
 
-IMPORTANT RULES:
-- Return ONLY valid JSON. No markdown, no preamble, no explanations outside the JSON.
-- All string values must be properly escaped.
+OUTPUT FORMAT — CRITICAL:
+- You must respond with ONLY a valid JSON object. No explanations, no markdown, no text before or after the JSON.
+- Do NOT wrap the JSON in \`\`\`json fences or any other formatting.
+- Do NOT include any preamble, summary, or commentary — the very first character of your response must be { and the very last must be }.
+- All string values must be properly escaped (no raw newlines inside strings).
 - If you cannot find data for a field, use null or an empty array — never omit keys.
 - Use web_search to look up real, current information. Do NOT hallucinate.`;
+}
+
+function buildRetryPrompt() {
+  return `Your previous response was not valid JSON — it contained text before or after the JSON object, or was wrapped in markdown code fences.
+
+Respond now with ONLY the raw JSON object. No explanation, no apology, no markdown. Start your response with { and end with }. Nothing else.`;
 }
 
 function buildResearchPrompt(competitorName, config) {
@@ -297,14 +305,60 @@ async function runResearch(competitorName, jobId) {
 
   console.log(`[${jobId}] Claude finished. Parsing output...`);
 
-  // Parse JSON — strip accidental markdown fences if present
+  // ── JSON extraction helper ───────────────────────────────────────────────
+  function extractJson(text) {
+    // 1. Strip markdown fences if present
+    let s = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+    // 2. If there's leading non-JSON text, find the first { and trim to it
+    const firstBrace = s.indexOf('{');
+    const lastBrace  = s.lastIndexOf('}');
+    if (firstBrace > 0) s = s.slice(firstBrace);
+    if (lastBrace !== -1 && lastBrace < s.length - 1) s = s.slice(0, lastBrace + 1);
+    return JSON.parse(s);
+  }
+
+  // ── First parse attempt ──────────────────────────────────────────────────
   let parsed;
+  let parseError;
   try {
-    const clean = finalText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-    parsed = JSON.parse(clean);
+    parsed = extractJson(finalText);
   } catch (err) {
-    console.error(`[${jobId}] JSON parse error. Raw response:\n${finalText.slice(0, 500)}`);
-    throw new Error('Failed to parse Claude response as JSON: ' + err.message);
+    parseError = err;
+    console.error(`[${jobId}] JSON parse error (attempt 1): ${err.message}`);
+    console.error(`[${jobId}] Raw Claude response (full):\n${finalText}`);
+  }
+
+  // ── Retry once with a stricter "JSON only" correction prompt ────────────
+  if (!parsed) {
+    console.log(`[${jobId}] Retrying with JSON-correction prompt...`);
+    try {
+      messages.push({ role: 'user', content: buildRetryPrompt() });
+
+      const retryResponse = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8192,
+        system: buildSystemPrompt(productConfig),
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages,
+      });
+
+      let retryText = '';
+      for (const block of retryResponse.content) {
+        if (block.type === 'text') retryText += block.text;
+      }
+
+      console.log(`[${jobId}] Retry response (first 300 chars): ${retryText.slice(0, 300)}`);
+      parsed = extractJson(retryText);
+      console.log(`[${jobId}] Retry parse succeeded.`);
+    } catch (retryErr) {
+      console.error(`[${jobId}] JSON parse error (attempt 2 / retry): ${retryErr.message}`);
+      // Mark job failed with a human-readable error, then bail out
+      await supabase
+        .from('research_jobs')
+        .update({ status: 'failed', error_message: `Claude returned non-JSON output after retry: ${retryErr.message}` })
+        .eq('id', jobId);
+      throw new Error(`Failed to parse Claude response as JSON after retry: ${retryErr.message}`);
+    }
   }
 
   // Write to research_outputs
