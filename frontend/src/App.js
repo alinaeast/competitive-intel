@@ -135,6 +135,21 @@ export default function App() {
     return competitorId;
   };
 
+  const handleDeleteCompetitor = (competitorId) => {
+    setCompetitors((prev) => prev.filter((c) => c.id !== competitorId));
+    setJobStatuses((prev) => {
+      const next = { ...prev };
+      delete next[competitorId];
+      return next;
+    });
+    // If the deleted competitor was selected, move to the next available one
+    setSelectedId((prev) => {
+      if (prev !== competitorId) return prev;
+      const remaining = competitors.filter((c) => c.id !== competitorId);
+      return remaining.length > 0 ? remaining[0].id : null;
+    });
+  };
+
   const selectedCompetitor = competitors.find((c) => c.id === selectedId);
   const selectedJob = selectedId ? jobStatuses[selectedId] : null;
 
@@ -170,6 +185,7 @@ export default function App() {
           jobStatuses={jobStatuses}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          onDelete={handleDeleteCompetitor}
           loading={loading}
         />
         <MainPanel
