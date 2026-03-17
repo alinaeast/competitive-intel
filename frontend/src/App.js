@@ -87,52 +87,83 @@ export default function App() {
 
   // Multi-competitor handler — used by the New Research modal
   const handleBatchResearch = async (entries) => {
+    console.log('[handleBatchResearch] entries:', entries);
     let firstId = null;
     for (const entry of entries) {
       const id = await queueResearch(entry.name.trim(), entry.website?.trim() || null);
+      console.log('[handleBatchResearch] queued:', entry.name, '→ id:', id);
       if (!firstId && id) firstId = id;
     }
+    console.log('[handleBatchResearch] done. firstId:', firstId);
     if (firstId) setSelectedId(firstId);
     setShowModal(false);
   };
 
   // Core logic: upsert competitor + create job + fire webhook; returns competitor id
   const queueResearch = async (competitorName, website = null) => {
-    let { data: existing } = await supabase
-      .from('competitors')
-      .select('*')
-      .ilike('name', competitorName)
-      .maybeSingle();
-
-    let competitorId;
-    if (!existing) {
-      const { data: inserted } = await supabase
+    try {
+      // 1. Look up existing competitor
+      const { data: existing, error: lookupError } = await supabase
         .from('competitors')
-        .insert({ name: competitorName, website, is_known: true })
+        .select('*')
+        .ilike('name', competitorName)
+        .maybeSingle();
+
+      if (lookupError) {
+        console.error('[queueResearch] competitor lookup error:', lookupError);
+        return null;
+      }
+
+      let competitorId;
+      if (!existing) {
+        // 2a. Insert new competitor
+        const { data: inserted, error: insertError } = await supabase
+          .from('competitors')
+          .insert({ name: competitorName, website })
+          .select()
+          .single();
+
+        if (insertError || !inserted) {
+          console.error('[queueResearch] competitor insert error:', insertError);
+          return null;
+        }
+        competitorId = inserted.id;
+        setCompetitors((prev) => [inserted, ...prev]);
+      } else {
+        competitorId = existing.id;
+      }
+
+      // 3. Create research job
+      const { data: job, error: jobError } = await supabase
+        .from('research_jobs')
+        .insert({ competitor_id: competitorId, status: 'pending', triggered_by: 'user' })
         .select()
         .single();
-      competitorId = inserted.id;
-      setCompetitors((prev) => [inserted, ...prev]);
-    } else {
-      competitorId = existing.id;
+
+      if (jobError || !job) {
+        console.error('[queueResearch] job insert error:', jobError);
+        return null;
+      }
+
+      setJobStatuses((prev) => ({ ...prev, [competitorId]: job }));
+
+      // 4. Fire webhook (non-blocking)
+      const webhookUrl = process.env.REACT_APP_N8N_WEBHOOK_URL;
+      if (!webhookUrl) {
+        console.error('[queueResearch] REACT_APP_N8N_WEBHOOK_URL is not set');
+      } else {
+        fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ competitor_name: competitorName, job_id: job.id }),
+        }).catch((err) => console.error('[queueResearch] webhook fetch error:', err));
+      }
+
+      return competitorId;
+    } catch (err) {
+      console.error('[queueResearch] unexpected error:', err);
+      return null;
     }
-
-    const { data: job } = await supabase
-      .from('research_jobs')
-      .insert({ competitor_id: competitorId, status: 'pending', triggered_by: 'user' })
-      .select()
-      .single();
-
-    setJobStatuses((prev) => ({ ...prev, [competitorId]: job }));
-
-    const webhookUrl = process.env.REACT_APP_N8N_WEBHOOK_URL;
-    fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ competitor_name: competitorName, job_id: job.id }),
-    }).catch(console.error);
-
-    return competitorId;
   };
 
   const handleDeleteCompetitor = (competitorId) => {
