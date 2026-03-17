@@ -80,7 +80,24 @@ export default function App() {
     };
   }, [loadCompetitors]);
 
-  const handleNewResearch = async ({ competitorName }) => {
+  // Single-competitor handler — used by HeadToHead "Run Full Research" button
+  const handleNewResearch = async ({ competitorName, competitorWebsite }) => {
+    await queueResearch(competitorName, competitorWebsite || null);
+  };
+
+  // Multi-competitor handler — used by the New Research modal
+  const handleBatchResearch = async (entries) => {
+    let firstId = null;
+    for (const entry of entries) {
+      const id = await queueResearch(entry.name.trim(), entry.website?.trim() || null);
+      if (!firstId && id) firstId = id;
+    }
+    if (firstId) setSelectedId(firstId);
+    setShowModal(false);
+  };
+
+  // Core logic: upsert competitor + create job + fire webhook; returns competitor id
+  const queueResearch = async (competitorName, website = null) => {
     let { data: existing } = await supabase
       .from('competitors')
       .select('*')
@@ -91,7 +108,7 @@ export default function App() {
     if (!existing) {
       const { data: inserted } = await supabase
         .from('competitors')
-        .insert({ name: competitorName, is_known: true })
+        .insert({ name: competitorName, website, is_known: true })
         .select()
         .single();
       competitorId = inserted.id;
@@ -107,7 +124,6 @@ export default function App() {
       .single();
 
     setJobStatuses((prev) => ({ ...prev, [competitorId]: job }));
-    setSelectedId(competitorId);
 
     const webhookUrl = process.env.REACT_APP_N8N_WEBHOOK_URL;
     fetch(webhookUrl, {
@@ -116,7 +132,7 @@ export default function App() {
       body: JSON.stringify({ competitor_name: competitorName, job_id: job.id }),
     }).catch(console.error);
 
-    setShowModal(false);
+    return competitorId;
   };
 
   const selectedCompetitor = competitors.find((c) => c.id === selectedId);
@@ -164,7 +180,7 @@ export default function App() {
       </div>
 
       {showModal && (
-        <NewResearchModal onSubmit={handleNewResearch} onClose={() => setShowModal(false)} />
+        <NewResearchModal onSubmit={handleBatchResearch} onClose={() => setShowModal(false)} />
       )}
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
