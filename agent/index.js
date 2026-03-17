@@ -6,7 +6,16 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+
+// Parse JSON bodies. Also accept requests where Content-Type is missing or
+// set to text/plain (common from n8n HTTP Request nodes).
+app.use(express.json({ type: ['application/json', 'text/plain', '*/*'] }));
+
+// Log every incoming request so we can see what arrives before any handler runs
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} | content-type: ${req.headers['content-type'] || 'none'}`);
+  next();
+});
 
 const anthropic = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
@@ -127,11 +136,25 @@ Return ONLY this JSON object — nothing else.`;
 // ─── /api/research ───────────────────────────────────────────────────────────
 
 app.post('/api/research', async (req, res) => {
-  const { competitor_name, job_id } = req.body;
+  // ── detailed intake logging ──────────────────────────────────────────────
+  console.log('[/api/research] headers:', JSON.stringify(req.headers, null, 2));
+  console.log('[/api/research] raw body type:', typeof req.body);
+  console.log('[/api/research] body:', JSON.stringify(req.body, null, 2));
 
-  if (!competitor_name || !job_id) {
-    return res.status(400).json({ error: 'competitor_name and job_id are required' });
+  const { competitor_name, job_id } = req.body ?? {};
+
+  if (!competitor_name) {
+    const msg = 'Missing required field: competitor_name';
+    console.error('[/api/research] 400 –', msg, '| body was:', JSON.stringify(req.body));
+    return res.status(400).json({ error: msg, received: req.body });
   }
+  if (!job_id) {
+    const msg = 'Missing required field: job_id';
+    console.error('[/api/research] 400 –', msg, '| body was:', JSON.stringify(req.body));
+    return res.status(400).json({ error: msg, received: req.body });
+  }
+
+  console.log(`[/api/research] accepted — competitor_name="${competitor_name}" job_id="${job_id}"`);
 
   // Respond immediately so n8n / caller doesn't time out
   res.json({ status: 'accepted', job_id });
