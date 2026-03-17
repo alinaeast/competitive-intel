@@ -43,7 +43,7 @@ export default function SettingsModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-1">Product Settings</h2>
+        <h2 className="text-lg font-semibold mb-1">My Product</h2>
         <p className="text-sm text-gray-400 mb-5">
           Claude uses your product details when generating head-to-head comparisons and battle cards.
         </p>

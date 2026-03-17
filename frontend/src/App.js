@@ -135,9 +135,9 @@ export default function App() {
           <button
             onClick={() => setShowSettings(true)}
             className="px-3 py-1.5 rounded-md border border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-800 text-sm transition-colors cursor-pointer"
-            title="Product settings"
+            title="My Product"
           >
-            ⚙ Settings
+            ⚙ My Product
           </button>
           <button
             onClick={() => setShowModal(true)}
