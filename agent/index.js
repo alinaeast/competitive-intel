@@ -69,8 +69,7 @@ IMPORTANT RULES:
 function buildResearchPrompt(competitorName, config) {
   const { company_name, product_name } = config;
 
-  // Use product name if available, fall back to company name, then generic "Us"
-  const ourLabel = product_name || company_name || 'Us';
+  const ourLabel   = product_name || company_name || 'Us';
   const ourContext = product_name && company_name
     ? `${product_name} by ${company_name}`
     : product_name || company_name || 'our product';
@@ -85,37 +84,92 @@ function buildResearchPrompt(competitorName, config) {
 7. Reddit and Hacker News discussions
 8. SEC filings (if they appear to be a public company)
 
-After gathering all information, return a single JSON object with EXACTLY these four top-level keys.
+Whenever you find a fact, note the URL where you found it so you can populate source_label and source_url fields.
 
-IMPORTANT for head_to_head: the "us" column represents ${ourContext}. Make comparisons specific to our actual product capabilities — do not be generic.
-IMPORTANT for battle_card: objection handling and landmines should be specific to winning deals against ${competitorName} when selling ${ourContext}.
+After gathering all information, return a single JSON object with EXACTLY these top-level keys.
+
+IMPORTANT for head_to_head: the "us" column represents ${ourContext}.
+IMPORTANT for battle_card: objection handling and landmines must be specific to winning deals against ${competitorName} when selling ${ourContext}.
 
 {
   "battle_card": {
-    "positioning": "string — how ${competitorName} positions itself in the market",
-    "pricing": "string — pricing model, tiers, and approximate costs",
-    "strengths": ["array", "of", "strings"],
-    "weaknesses": ["array", "of", "strings"],
-    "objection_handling": [
-      { "objection": "string — a common objection when prospects prefer ${competitorName}", "response": "string — how to counter it when selling ${ourContext}" }
+    "positioning": {
+      "core_message": "string — their single most memorable brand promise or tagline in one sentence",
+      "insights": [
+        {
+          "headline": "string — bold 3-6 word title",
+          "explanation": "string — 1-2 sentences expanding on this insight",
+          "source_label": "string or null — e.g. G2, Homepage, TechCrunch",
+          "source_url": "string or null — direct URL"
+        }
+      ]
+    },
+    "pricing": {
+      "tiers": [
+        {
+          "tier": "string — tier name e.g. Free, Pro, Enterprise",
+          "price": "string — e.g. $0/mo, $49/seat/mo, Custom",
+          "target_customer": "string — who this tier is for",
+          "notes": "string or null — key limits or inclusions"
+        }
+      ],
+      "recent_changes": false,
+      "recent_change_note": "string or null — describe the change if recent_changes is true",
+      "source_label": "string or null",
+      "source_url": "string or null"
+    },
+    "strengths": [
+      {
+        "title": "string — bold 3-5 word strength label",
+        "explanation": "string — one sentence describing this strength",
+        "deal_tip": "string — one sentence coaching tip for reps: how to use this in a competitive deal"
+      }
     ],
-    "landmines": ["things to watch out for or avoid saying when competing against ${competitorName}"]
+    "weaknesses": [
+      {
+        "title": "string — bold 3-5 word weakness label",
+        "explanation": "string — one sentence describing this weakness",
+        "deal_tip": "string — one sentence coaching tip for reps: how to exploit this weakness in a deal"
+      }
+    ],
+    "objection_handling": [
+      {
+        "objection": "string — a common objection when prospects prefer ${competitorName}",
+        "response": "string — full talk track, 2-4 sentences, how to counter it when selling ${ourContext}"
+      }
+    ],
+    "landmines": [
+      {
+        "statement": "string — the specific thing to avoid saying or doing",
+        "explanation": "string — one sentence on why this is dangerous in a competitive deal"
+      }
+    ],
+    "sources": [
+      {
+        "label": "string — short source name e.g. G2, Pricing Page, TechCrunch",
+        "url": "string — full URL",
+        "description": "string — one short phrase on what this source provided"
+      }
+    ]
   },
   "competitive_triggers": {
-    "recent_funding": [{ "date": "YYYY-MM-DD or null", "summary": "string" }],
-    "product_launches": [{ "date": "YYYY-MM-DD or null", "summary": "string" }],
-    "pricing_changes": [{ "date": "YYYY-MM-DD or null", "summary": "string" }],
-    "key_hires": [{ "date": "YYYY-MM-DD or null", "summary": "string" }],
-    "bad_press": [{ "date": "YYYY-MM-DD or null", "summary": "string" }]
+    "recent_funding":   [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
+    "product_launches": [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
+    "pricing_changes":  [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
+    "key_hires":        [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
+    "bad_press":        [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }]
   },
   "head_to_head": {
     "summary": "string — 2-3 sentence overall comparison of ${ourContext} vs ${competitorName}",
     "feature_matrix": [
       {
-        "feature": "string",
+        "feature": "string — feature or capability name",
         "us": "string — capability of ${ourLabel}",
         "them": "string — capability of ${competitorName}",
-        "advantage": "us | them | neutral"
+        "advantage": "us | them | neutral",
+        "talking_point": "string — one sharp sentence a sales rep can say on a call about this specific comparison",
+        "source_label": "string or null",
+        "source_url": "string or null"
       }
     ]
   },
@@ -123,14 +177,20 @@ IMPORTANT for battle_card: objection handling and landmines should be specific t
     {
       "name": "string",
       "website": "string — full URL",
-      "reason_flagged": "closest substitute | closest substitute | emerging threat",
+      "reason_flagged": "closest substitute | emerging threat",
       "one_line_summary": "string"
     }
   ]
 }
 
-Return exactly 2 closest substitutes and 1 emerging threat in related_competitors (3 total).
-Return ONLY this JSON object — nothing else.`;
+Rules:
+- Return exactly 2 closest substitutes and 1 emerging threat in related_competitors (3 total).
+- positioning.insights: return 3-4 items.
+- strengths and weaknesses: return 4-6 items each.
+- feature_matrix: return 6-10 rows covering the most important capability comparisons.
+- sources in battle_card.sources: list every URL you actually visited, 5-10 total.
+- If you cannot find real data for a field, use null or [] — never fabricate.
+- Return ONLY this JSON object — nothing else.`;
 }
 
 // ─── /api/research ───────────────────────────────────────────────────────────
@@ -248,6 +308,9 @@ async function runResearch(competitorName, jobId) {
   }
 
   // Write to research_outputs
+  // raw_sources: pull from battle_card.sources (the agent's collected source list)
+  const rawSources = parsed.battle_card?.sources || null;
+
   const { error: writeError } = await supabase.from('research_outputs').insert({
     competitor_id: competitorId,
     job_id: jobId,
@@ -255,7 +318,7 @@ async function runResearch(competitorName, jobId) {
     competitive_triggers: parsed.competitive_triggers,
     head_to_head: parsed.head_to_head,
     related_competitors: parsed.related_competitors,
-    raw_sources: null,
+    raw_sources: rawSources,
     version: 1,
   });
 

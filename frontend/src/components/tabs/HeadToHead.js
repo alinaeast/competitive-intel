@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Shared                                                                       */
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 const ADV_CONFIG = {
   us:      { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: '✓ Us'    },
@@ -16,10 +20,26 @@ function AdvBadge({ value }) {
   const v = value?.toLowerCase() || 'neutral';
   const s = ADV_CONFIG[v] || ADV_CONFIG.neutral;
   return (
-    <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${s.cls}`}>
+    <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold whitespace-nowrap ${s.cls}`}>
       {s.label}
     </span>
   );
+}
+
+function SourceBadge({ label, url }) {
+  if (!label) return null;
+  const inner = (
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded
+                     bg-gray-100 text-gray-400 border border-gray-200 hover:bg-indigo-50
+                     hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+      <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M2 6h8M7 3l3 3-3 3" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      {label}
+    </span>
+  );
+  if (url) return <a href={url} target="_blank" rel="noreferrer" className="no-underline">{inner}</a>;
+  return inner;
 }
 
 function ReasonBadge({ reason }) {
@@ -31,6 +51,86 @@ function ReasonBadge({ reason }) {
     </span>
   );
 }
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Feature row (expandable)                                                     */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+function FeatureRow({ row, index }) {
+  const [open, setOpen] = useState(false);
+  const hasTalkingPoint = !!row.talking_point;
+
+  const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+
+  return (
+    <>
+      <tr
+        className={`border-t border-gray-100 ${rowBg} ${hasTalkingPoint ? 'cursor-pointer hover:bg-indigo-50/40' : ''} transition-colors`}
+        onClick={() => hasTalkingPoint && setOpen(!open)}
+      >
+        {/* Feature */}
+        <td className="px-4 py-3.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-gray-800">{row.feature}</span>
+            {row.source_label && (
+              <SourceBadge label={row.source_label} url={row.source_url} />
+            )}
+          </div>
+        </td>
+
+        {/* Us */}
+        <td className="px-4 py-3.5 text-xs text-gray-600 leading-snug align-top">
+          {row.us || '—'}
+        </td>
+
+        {/* Them */}
+        <td className="px-4 py-3.5 text-xs text-gray-600 leading-snug align-top">
+          {row.them || '—'}
+        </td>
+
+        {/* Advantage */}
+        <td className="px-4 py-3.5 align-top">
+          <AdvBadge value={row.advantage} />
+        </td>
+
+        {/* Talking Point */}
+        <td className="px-4 py-3.5 align-top">
+          {hasTalkingPoint ? (
+            <div className="flex items-start gap-1.5">
+              <span className="text-xs text-gray-600 leading-snug flex-1">{row.talking_point}</span>
+              <svg
+                className={`w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5 transition-transform ${open ? 'rotate-180' : ''}`}
+                viewBox="0 0 20 20" fill="currentColor"
+              >
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+            </div>
+          ) : (
+            <span className="text-xs text-gray-300">—</span>
+          )}
+        </td>
+      </tr>
+
+      {/* Expanded detail row */}
+      {open && (
+        <tr className={`${rowBg} border-t border-indigo-100`}>
+          <td colSpan={5} className="px-4 pb-4 pt-2">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3">
+              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-widest mb-1">
+                💬 Rep Talking Point
+              </p>
+              <p className="text-sm text-indigo-800 leading-relaxed">{row.talking_point}</p>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Related competitor card                                                      */
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 function RelatedCard({ comp, onRun }) {
   return (
@@ -62,6 +162,10 @@ function RelatedCard({ comp, onRun }) {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Main component                                                               */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 export default function HeadToHead({ data, related, onRunResearchFor }) {
   const h = data    ? (typeof data    === 'string' ? JSON.parse(data)    : data)    : null;
   const r = related ? (typeof related === 'string' ? JSON.parse(related) : related) : [];
@@ -71,7 +175,7 @@ export default function HeadToHead({ data, related, onRunResearchFor }) {
   }
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="max-w-5xl space-y-8">
       {/* ── Feature matrix ─────────────────────────────────────────────── */}
       {h && (
         <div>
@@ -86,36 +190,34 @@ export default function HeadToHead({ data, related, onRunResearchFor }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-1/4">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-[18%]">
                       Feature
                     </th>
-                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 w-1/4">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-[18%]">
                       Us
                     </th>
-                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 w-1/4">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-[18%]">
                       Them
                     </th>
-                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 w-1/4">
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 w-[12%]">
                       Advantage
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 w-[34%]">
+                      Talking Point
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {h.feature_matrix.map((row, i) => (
-                    <tr
-                      key={i}
-                      className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
-                    >
-                      <td className="px-5 py-3.5 font-semibold text-gray-800">{row.feature}</td>
-                      <td className="px-5 py-3.5 text-center text-gray-600 text-xs leading-snug">{row.us}</td>
-                      <td className="px-5 py-3.5 text-center text-gray-600 text-xs leading-snug">{row.them}</td>
-                      <td className="px-5 py-3.5 text-center">
-                        <AdvBadge value={row.advantage} />
-                      </td>
-                    </tr>
+                    <FeatureRow key={i} row={row} index={i} />
                   ))}
                 </tbody>
               </table>
+              <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50">
+                <p className="text-xs text-gray-400">
+                  Click any row with a talking point to expand it.
+                </p>
+              </div>
             </div>
           )}
         </div>

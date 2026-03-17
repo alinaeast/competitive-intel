@@ -71,7 +71,13 @@ export default function CompetitiveTriggers({ data }) {
       if (!items) return;
       (Array.isArray(items) ? items : [items]).forEach((item) => {
         if (!item) return;
-        events.push({ type, date: item.date, summary: item.summary });
+        events.push({
+          type,
+          date:         item.date,
+          summary:      item.summary,
+          source_label: item.source_label || null,
+          source_url:   item.source_url   || null,
+        });
       });
     });
   }
@@ -105,6 +111,30 @@ export default function CompetitiveTriggers({ data }) {
                 })
               : null;
 
+            // Source badge
+            const sourceEl = e.source_label ? (
+              e.source_url ? (
+                <a
+                  href={e.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="no-underline inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5
+                             rounded-full bg-gray-100 text-gray-500 border border-gray-200
+                             hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                >
+                  <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M2 6h8M7 3l3 3-3 3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  via {e.source_label}
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5
+                                 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                  via {e.source_label}
+                </span>
+              )
+            ) : null;
+
             return (
               <div key={i} className="relative flex gap-5 pl-10">
                 {/* Timeline dot */}
@@ -119,6 +149,7 @@ export default function CompetitiveTriggers({ data }) {
                     {dateStr && (
                       <span className="text-xs text-gray-400 font-medium">{dateStr}</span>
                     )}
+                    {sourceEl}
                   </div>
                   <p className="text-sm text-gray-700 leading-relaxed">{e.summary}</p>
                 </div>
