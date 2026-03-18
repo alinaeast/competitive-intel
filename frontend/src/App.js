@@ -46,14 +46,16 @@ export default function App() {
   }, [loadCompetitors]);
 
   useEffect(() => {
+    // ── research_jobs: catch status transitions (pending → running → complete/failed)
     const jobChannel = supabase
       .channel('research_jobs_rt')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'research_jobs' },
         (payload) => {
-          const job = payload.new || payload.old;
-          if (!job) return;
+          const job = payload.new;
+          if (!job || !job.competitor_id) return;
+          console.log('[Realtime] research_jobs update:', job.competitor_id, job.status);
           setJobStatuses((prev) => {
             const existing = prev[job.competitor_id];
             if (!existing || job.created_at >= existing.created_at) {
@@ -63,8 +65,39 @@ export default function App() {
           });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) console.error('[Realtime] research_jobs channel error:', err);
+        else console.log('[Realtime] research_jobs channel status:', status);
+      });
 
+    // ── research_outputs: secondary signal — when an output row is inserted
+    //    the job *must* be complete, so we update local job status directly.
+    //    This fires even if Realtime isn't enabled on research_jobs itself.
+    const outputChannel = supabase
+      .channel('research_outputs_rt')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'research_outputs' },
+        (payload) => {
+          const output = payload.new;
+          if (!output?.competitor_id) return;
+          console.log('[Realtime] research_outputs insert for competitor:', output.competitor_id);
+          setJobStatuses((prev) => {
+            const existing = prev[output.competitor_id];
+            if (!existing) return prev;
+            return {
+              ...prev,
+              [output.competitor_id]: { ...existing, status: 'complete' },
+            };
+          });
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) console.error('[Realtime] research_outputs channel error:', err);
+        else console.log('[Realtime] research_outputs channel status:', status);
+      });
+
+    // ── competitors: reload list when a new competitor is inserted
     const compChannel = supabase
       .channel('competitors_rt')
       .on(
@@ -76,9 +109,52 @@ export default function App() {
 
     return () => {
       supabase.removeChannel(jobChannel);
+      supabase.removeChannel(outputChannel);
       supabase.removeChannel(compChannel);
     };
   }, [loadCompetitors]);
+
+  // ── Polling fallback ───────────────────────────────────────────────────────
+  // If any jobs are still pending/running, poll Supabase every 5 s.
+  // This guarantees the UI updates even when Realtime isn't enabled on the table.
+  useEffect(() => {
+    const activeEntries = Object.entries(jobStatuses).filter(
+      ([, j]) => j?.status === 'pending' || j?.status === 'running'
+    );
+    if (activeEntries.length === 0) return;
+
+    const interval = setInterval(async () => {
+      const activeIds = activeEntries.map(([competitorId]) => competitorId);
+      const { data: jobs } = await supabase
+        .from('research_jobs')
+        .select('*')
+        .in('competitor_id', activeIds)
+        .order('created_at', { ascending: false });
+
+      if (!jobs || jobs.length === 0) return;
+
+      // Build latest-per-competitor map
+      const latest = {};
+      jobs.forEach((j) => {
+        if (!latest[j.competitor_id]) latest[j.competitor_id] = j;
+      });
+
+      setJobStatuses((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        Object.entries(latest).forEach(([cid, j]) => {
+          if (prev[cid]?.status !== j.status) {
+            console.log('[Poll] job status changed:', cid, prev[cid]?.status, '→', j.status);
+            next[cid] = j;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [jobStatuses]);
 
   // Single-competitor handler — used by HeadToHead "Run Full Research" button
   const handleNewResearch = async ({ competitorName, competitorWebsite }) => {
