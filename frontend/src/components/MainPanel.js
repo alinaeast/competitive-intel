@@ -4,7 +4,7 @@ import BattleCard from './tabs/BattleCard';
 import CompetitiveTriggers from './tabs/CompetitiveTriggers';
 import HeadToHead from './tabs/HeadToHead';
 
-const TABS = ['Battle Card', 'Competitive Triggers', 'Head-to-Head'];
+const TABS = ['Battle Cards', 'Competitive Triggers', 'Head-to-Head'];
 
 export default function MainPanel({ competitor, job, onRunResearchFor }) {
   const [activeTab, setActiveTab] = useState(0);

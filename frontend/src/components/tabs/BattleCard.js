@@ -358,7 +358,7 @@ function SourcesSection({ sources }) {
 
 export default function BattleCard({ data }) {
   if (!data) {
-    return <div className="text-sm text-gray-400 py-16 text-center">No battle card data yet.</div>;
+    return <div className="text-sm text-gray-400 py-16 text-center">No battle cards data yet.</div>;
   }
 
   const d = typeof data === 'string' ? JSON.parse(data) : data;
