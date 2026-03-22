@@ -318,7 +318,7 @@ export default function App() {
         <MainPanel
           competitor={selectedCompetitor}
           job={selectedJob}
-          onRunResearchFor={(name) => handleNewResearch({ competitorName: name })}
+          onRunResearchFor={(name, website) => handleNewResearch({ competitorName: name, competitorWebsite: website })}
         />
       </div>
 

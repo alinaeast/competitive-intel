@@ -78,7 +78,7 @@ const FILTERS = [
 
 function FeatureMatrix({ rows, ourLabel }) {
   const [filter, setFilter] = useState('all');
-  const allRows = rows || [];
+  const allRows = useMemo(() => rows || [], [rows]);
 
   const counts = useMemo(() => ({
     all:     allRows.length,
