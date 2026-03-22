@@ -437,10 +437,16 @@ app.post('/api/research', async (req, res) => {
   const {
     competitor_name,
     job_id,
+    // prefixed field names (sent by frontend via n8n)
     competitor_product_name,
     competitor_url,
     competitor_additional_urls,
     competitor_notes,
+    // un-prefixed fallbacks — n8n sometimes strips the "competitor_" prefix
+    product_name:    body_product_name,
+    url:             body_url,
+    additional_urls: body_additional_urls,
+    notes:           body_notes,
   } = req.body ?? {};
 
   if (!competitor_name) {
@@ -459,12 +465,16 @@ app.post('/api/research', async (req, res) => {
   // Respond immediately so n8n / caller doesn't time out
   res.json({ status: 'accepted', job_id });
 
+  // Accept both prefixed and un-prefixed field names — use whichever arrived
   const competitorInfo = {
-    product_name: competitor_product_name || null,
-    url: competitor_url || null,
-    additional_urls: Array.isArray(competitor_additional_urls) ? competitor_additional_urls : [],
-    notes: competitor_notes || null,
+    product_name: competitor_product_name || body_product_name || null,
+    url:          competitor_url          || body_url          || null,
+    additional_urls: Array.isArray(competitor_additional_urls) ? competitor_additional_urls
+                   : Array.isArray(body_additional_urls)       ? body_additional_urls
+                   : [],
+    notes: competitor_notes || body_notes || null,
   };
+  console.log('[/api/research] competitorInfo resolved:', JSON.stringify(competitorInfo));
 
   // Run research asynchronously
   runResearch(competitor_name, job_id, competitorInfo).catch(async (err) => {
