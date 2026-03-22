@@ -185,7 +185,8 @@ export default function App() {
   // entry = { name, product_name?, product_url?, additional_urls?, notes? }
   const queueResearch = async (entry) => {
     const competitorName = typeof entry === 'string' ? entry : entry.name;
-    const productUrl = typeof entry === 'string' ? null : entry.product_url || null;
+    const productUrl  = typeof entry === 'string' ? null : entry.product_url  || null;
+    const productName = typeof entry === 'string' ? null : entry.product_name || null;
 
     try {
       // 1. Look up existing competitor
@@ -205,7 +206,7 @@ export default function App() {
         // 2a. Insert new competitor (website = primary product URL for display in sidebar)
         const { data: inserted, error: insertError } = await supabase
           .from('competitors')
-          .insert({ name: competitorName, website: productUrl })
+          .insert({ name: competitorName, website: productUrl, product_name: productName })
           .select()
           .single();
 

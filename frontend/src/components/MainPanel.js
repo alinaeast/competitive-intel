@@ -68,8 +68,11 @@ export default function MainPanel({ competitor, job, onRunResearchFor }) {
         <div className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight leading-tight">
-              {competitor.name}
+              {competitor.product_name || competitor.name}
             </h1>
+            {competitor.product_name && competitor.product_name !== competitor.name && (
+              <p className="text-xs text-gray-400 mt-0.5">{competitor.name}</p>
+            )}
             {competitor.website && (
               <a
                 href={competitor.website}

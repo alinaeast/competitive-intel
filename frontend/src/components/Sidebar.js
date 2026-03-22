@@ -75,7 +75,7 @@ export default function Sidebar({ competitors, jobStatuses, selectedId, onSelect
             return (
               <div key={c.id} className="border-l-2 border-red-500 bg-gray-800/80 px-4 py-4">
                 <p className="text-xs text-gray-300 mb-1 truncate">
-                  Delete <span className="font-semibold text-white">{c.name}</span>?
+                  Delete <span className="font-semibold text-white">{c.product_name || c.name}</span>?
                 </p>
                 <p className="text-xs text-gray-500 mb-3 leading-snug">
                   Removes all jobs and research data.
@@ -121,8 +121,13 @@ export default function Sidebar({ competitors, jobStatuses, selectedId, onSelect
                 }`}
               >
                 <span className="text-sm font-semibold truncate pr-10 leading-tight">
-                  {c.name}
+                  {c.product_name || c.name}
                 </span>
+                {c.product_name && c.product_name !== c.name && (
+                  <span className="text-xs text-gray-500 truncate pr-10 leading-tight -mt-0.5">
+                    {c.name}
+                  </span>
+                )}
                 {job ? (
                   <StatusPill status={job.status} />
                 ) : (

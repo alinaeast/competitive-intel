@@ -5,6 +5,9 @@ create table if not exists config (
   value text not null
 );
 
+-- Add product_name column to competitors (run once — safe to re-run)
+alter table competitors add column if not exists product_name text;
+
 -- Enable realtime for all tables (if not already enabled)
 alter publication supabase_realtime add table competitors;
 alter publication supabase_realtime add table research_jobs;
