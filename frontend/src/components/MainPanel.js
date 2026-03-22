@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import BattleCard from './tabs/BattleCard';
-import CompetitiveTriggers from './tabs/CompetitiveTriggers';
-import HeadToHead from './tabs/HeadToHead';
+import Overview  from './tabs/Overview';
+import Sales     from './tabs/Sales';
+import Product   from './tabs/Product';
+import Marketing from './tabs/Marketing';
 
-const TABS = ['Battle Cards', 'Competitive Triggers', 'Head-to-Head'];
+const TABS = ['Overview', 'Sales', 'Product', 'Marketing'];
 
 export default function MainPanel({ competitor, job, onRunResearchFor }) {
   const [activeTab, setActiveTab] = useState(0);
   const [output, setOutput] = useState(null);
 
+  // Reset tab and load output whenever the selected competitor changes
   useEffect(() => {
-    if (!competitor) return;
+    if (!competitor) { setOutput(null); return; }
+    setActiveTab(0);
     setOutput(null);
 
     const load = async () => {
@@ -24,9 +27,9 @@ export default function MainPanel({ competitor, job, onRunResearchFor }) {
         .maybeSingle();
       setOutput(data || null);
     };
-
     load();
 
+    // Realtime: pick up the new row the moment research completes
     const channel = supabase
       .channel(`output_${competitor.id}`)
       .on(
@@ -50,9 +53,13 @@ export default function MainPanel({ competitor, job, onRunResearchFor }) {
     );
   }
 
-  const isRunning = job?.status === 'running';
   const isPending = job?.status === 'pending';
+  const isRunning = job?.status === 'running';
   const isFailed  = job?.status === 'failed';
+
+  // Detect v2 schema: battle_card contains { overview, sales, product, marketing }
+  const v2 = output?.battle_card?.overview != null;
+  const schema = v2 ? output.battle_card : null;
 
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
@@ -106,19 +113,28 @@ export default function MainPanel({ competitor, job, onRunResearchFor }) {
             <span>Research job failed. Please try running again.</span>
           </div>
         )}
-        {output && (
+
+        {output && !v2 && (
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-amber-800 text-sm">
+            <span className="text-lg shrink-0">↻</span>
+            <span>This research was generated with an older schema. Re-run research to see the new dashboard.</span>
+          </div>
+        )}
+
+        {schema && (
           <>
-            {activeTab === 0 && <BattleCard data={output.battle_card} />}
-            {activeTab === 1 && <CompetitiveTriggers data={output.competitive_triggers} />}
-            {activeTab === 2 && (
-              <HeadToHead
-                data={output.head_to_head}
-                related={output.related_competitors}
-                onRunResearchFor={onRunResearchFor}
+            {activeTab === 0 && (
+              <Overview
+                data={schema.overview}
+                onRunResearch={(name, website) => onRunResearchFor && onRunResearchFor(name, website)}
               />
             )}
+            {activeTab === 1 && <Sales    data={schema.sales} />}
+            {activeTab === 2 && <Product  data={schema.product} />}
+            {activeTab === 3 && <Marketing data={schema.marketing} />}
           </>
         )}
+
         {!output && !isPending && !isRunning && !isFailed && (
           <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-5 py-4 text-gray-400 text-sm shadow-sm">
             No research data yet. Run a new job to see results here.
@@ -133,10 +149,10 @@ function StatusBar({ job, output }) {
   if (!job) return null;
 
   const STATUS = {
-    pending:  { pill: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500',               label: 'Pending'  },
-    running:  { pill: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500 animate-pulse',  label: 'Running…' },
-    complete: { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500',             label: 'Complete' },
-    failed:   { pill: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-500',                 label: 'Failed'   },
+    pending:  { pill: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500',              label: 'Pending'  },
+    running:  { pill: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500 animate-pulse', label: 'Running…' },
+    complete: { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500',            label: 'Complete' },
+    failed:   { pill: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-500',                label: 'Failed'   },
   };
 
   const s = STATUS[job.status] || STATUS.pending;

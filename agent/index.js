@@ -120,7 +120,7 @@ function buildResearchPrompt(competitorName, productConfig, competitorInfo = {})
     notes: compNotes,
   } = competitorInfo;
 
-  const ourLabel   = product_name || company_name || 'Us';
+  const ourLabel   = product_name || company_name || 'Our Product';
   const ourContext = product_name && company_name
     ? `${product_name} by ${company_name}`
     : product_name || company_name || 'our product';
@@ -129,142 +129,243 @@ function buildResearchPrompt(competitorName, productConfig, competitorInfo = {})
     ? `${compProductName} by ${competitorName}`
     : competitorName;
 
-  // Build crawl lists
-  const ourUrls = [product_url, ...(ourAdditional || [])].filter(Boolean);
+  // Build prioritised crawl lists
+  const ourUrls  = [product_url, ...(ourAdditional || [])].filter(Boolean);
   const compUrls = [compUrl, ...compAdditional].filter(Boolean);
 
   let crawlSection = '';
   if (compUrls.length > 0) {
-    crawlSection += `\n\nCOMPETITOR PROVIDED URLS — crawl these first, treat as source of truth:`;
+    crawlSection += `\n\nCOMPETITOR PROVIDED URLS — crawl first, treat as source of truth:`;
     compUrls.forEach((u, i) => { crawlSection += `\n${i + 1}. ${u}`; });
     crawlSection += `\nIf any external source contradicts these URLs, the provided URLs win.`;
   }
   if (ourUrls.length > 0) {
-    crawlSection += `\n\nOUR PRODUCT PROVIDED URLS — use for the "us" column in head_to_head:`;
+    crawlSection += `\n\nOUR PRODUCT PROVIDED URLS — use for the "us" column throughout:`;
     ourUrls.forEach((u, i) => { crawlSection += `\n${i + 1}. ${u}`; });
   }
   if (compNotes) {
-    crawlSection += `\n\nADDITIONAL NOTES FROM REQUESTER: ${compNotes}`;
+    crawlSection += `\n\nADDITIONAL CONTEXT FROM REQUESTER: ${compNotes}`;
   }
 
-  return `Research the competitor "${compLabel}" thoroughly.${crawlSection}
+  return `Research the competitor "${compLabel}" thoroughly and produce a complete competitive intelligence report.${crawlSection}
 
 CRAWL ORDER:
-1. Provided URLs above (both competitor and our product) — highest priority
-2. ${competitorName} pricing page (if not already in provided URLs)
-3. ${competitorName} product changelog or release notes
+1. Provided URLs above (highest priority, source of truth)
+2. ${competitorName} pricing page
+3. ${competitorName} product changelog / release notes
 4. G2 and Capterra reviews for ${competitorName}
-5. Google News: "${competitorName}" mentions in the last 12 months
+5. Google News: "${competitorName}" past 24 months
 6. LinkedIn company page for ${competitorName}
-7. Reddit and Hacker News discussions about ${competitorName}
-8. SEC filings if ${competitorName} appears to be a public company
+7. ${competitorName} blog and official social channels
+8. SEC filings if ${competitorName} is a public company
 
-CITATION REQUIREMENT: For every fact you include in the output, record the exact source URL where you found it. Use the provided URLs as citation sources where applicable. For external sources, include the page URL and date. If you cannot find a source for a claim, mark it source_label: "unverified", source_url: null.
+CITATION REQUIREMENT: Every single claim, data point, quote, and story must include source_label (publication or platform name) and source_url (direct URL). If a fact comes from a provided URL, cite that URL exactly. If you cannot verify a claim from a credible source, do NOT include it — return null or [] for that field rather than fabricating or guessing.
 
-After gathering all information, return a single JSON object with EXACTLY these top-level keys.
-
-IMPORTANT for head_to_head: the "us" column represents ${ourContext}.
-IMPORTANT for battle_card: objection handling and landmines must be specific to winning deals against ${compLabel} when selling ${ourContext}.
+After gathering all information, return a single JSON object with EXACTLY this structure:
 
 {
-  "battle_card": {
-    "positioning": {
-      "core_message": "string — their single most memorable brand promise or tagline in one sentence",
-      "insights": [
-        {
-          "headline": "string — bold 3-6 word title",
-          "explanation": "string — 1-2 sentences expanding on this insight",
-          "source_label": "string or null — e.g. G2, Homepage, TechCrunch",
-          "source_url": "string or null — direct URL"
-        }
-      ]
+  "overview": {
+    "company_snapshot": {
+      "founded": "4-digit year string or null",
+      "employees": "string e.g. '500–1,000' or null",
+      "funding_arr": "string e.g. 'Series C · $120M raised' or null",
+      "hq": "string e.g. 'San Francisco, CA' or null",
+      "one_liner": "string — one sentence on what the company does",
+      "source_label": "string or null",
+      "source_url": "string or null"
+    },
+    "product_focus": {
+      "core_use_case": "string — the primary job their product does",
+      "target_customer": "string — who buys this: role, company size, industry",
+      "key_differentiators": ["string — 3-4 specific, verifiable differentiators"],
+      "problem_solved": "string — the specific pain their product addresses",
+      "source_label": "string or null",
+      "source_url": "string or null"
     },
     "pricing": {
       "tiers": [
         {
           "tier": "string — tier name e.g. Free, Pro, Enterprise",
-          "price": "string — e.g. $0/mo, $49/seat/mo, Custom",
-          "target_customer": "string — who this tier is for",
-          "notes": "string or null — key limits or inclusions"
+          "price": "string — e.g. '$49/seat/mo' or 'Custom'",
+          "included": "string — key inclusions for this tier",
+          "limitations": "string or null — notable limits or caps",
+          "source_label": "string or null",
+          "source_url": "string or null"
         }
       ],
-      "recent_changes": false,
-      "recent_change_note": "string or null — describe the change if recent_changes is true",
-      "source_label": "string or null",
-      "source_url": "string or null"
+      "recent_change": false,
+      "recent_change_note": "string or null — describe if recent_change is true",
+      "recent_change_date": "YYYY-MM-DD or null"
     },
-    "strengths": [
+    "competitive_triggers": [
       {
-        "title": "string — bold 3-5 word strength label",
-        "explanation": "string — one sentence describing this strength",
-        "deal_tip": "string — one sentence coaching tip for reps: how to use this in a competitive deal"
+        "date": "YYYY-MM-DD or null",
+        "type": "pricing_change | product_launch | funding | key_hire | bad_press",
+        "summary": "string — one sentence describing the event",
+        "source_label": "string — publication or platform name",
+        "source_url": "string or null"
       }
     ],
-    "weaknesses": [
+    "related_competitors": [
       {
-        "title": "string — bold 3-5 word weakness label",
-        "explanation": "string — one sentence describing this weakness",
-        "deal_tip": "string — one sentence coaching tip for reps: how to exploit this weakness in a deal"
-      }
-    ],
-    "objection_handling": [
-      {
-        "objection": "string — a common objection when prospects prefer ${competitorName}",
-        "response": "string — full talk track, 2-4 sentences, how to counter it when selling ${ourContext}"
-      }
-    ],
-    "landmines": [
-      {
-        "statement": "string — the specific thing to avoid saying or doing",
-        "explanation": "string — one sentence on why this is dangerous in a competitive deal"
-      }
-    ],
-    "sources": [
-      {
-        "label": "string — short source name e.g. G2, Pricing Page, TechCrunch",
-        "url": "string — full URL",
-        "description": "string — one short phrase on what this source provided"
+        "name": "string — company name",
+        "product_name": "string or null",
+        "website": "string — full URL",
+        "tag": "closest substitute | emerging threat",
+        "summary": "string — one sentence on why this competitor is relevant"
       }
     ]
   },
-  "competitive_triggers": {
-    "recent_funding":   [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
-    "product_launches": [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
-    "pricing_changes":  [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
-    "key_hires":        [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }],
-    "bad_press":        [{ "date": "YYYY-MM-DD or null", "summary": "string", "source_label": "string or null", "source_url": "string or null" }]
-  },
-  "head_to_head": {
-    "summary": "string — 2-3 sentence overall comparison of ${ourContext} vs ${competitorName}",
-    "feature_matrix": [
+  "sales": {
+    "battle_cards": {
+      "positioning_summary": "string — 2-3 sentences on how ${compLabel} positions itself in the market",
+      "strengths": [
+        {
+          "title": "string — 3-5 word label",
+          "explanation": "string — one sentence",
+          "source_label": "string or null",
+          "source_url": "string or null"
+        }
+      ],
+      "weaknesses": [
+        {
+          "title": "string — 3-5 word label",
+          "explanation": "string — one sentence",
+          "source_label": "string or null",
+          "source_url": "string or null"
+        }
+      ]
+    },
+    "objection_handling": [
       {
-        "feature": "string — feature or capability name",
-        "us": "string — capability of ${ourLabel}",
-        "them": "string — capability of ${competitorName}",
-        "advantage": "us | them | neutral",
-        "talking_point": "string — one sharp sentence a sales rep can say on a call about this specific comparison",
+        "objection": "string — specific thing a prospect says when preferring ${compLabel}",
+        "talking_points": ["string — one sharp counter-point per item, 2-4 items total"],
+        "evidence": "string — the supporting fact or data behind these talking points",
         "source_label": "string or null",
         "source_url": "string or null"
       }
+    ],
+    "landmines_to_watch": [
+      {
+        "statement": "string — the specific thing ${compLabel} says or plants against ${ourContext}",
+        "context": "string — why they use this and when in the sales cycle",
+        "how_to_neutralize": "string — specific reframe or response a rep can use",
+        "source_label": "string or null",
+        "source_url": "string or null"
+      }
+    ],
+    "landmines_to_plant": [
+      {
+        "topic": "string — the area of ${compLabel}'s vulnerability",
+        "suggested_language": "string — specific question or statement a rep can use verbatim",
+        "rationale": "string — why this creates doubt or opens an advantage for ${ourContext}",
+        "source_label": "string or null",
+        "source_url": "string or null"
+      }
+    ],
+    "win_loss_stories": [
+      {
+        "outcome": "win | loss",
+        "story": "string — direct quote or very close paraphrase. Do NOT invent or pad.",
+        "source_platform": "string — e.g. G2, Capterra, Reddit",
+        "source_url": "string — direct link to the review or post",
+        "date": "YYYY-MM-DD or null"
+      }
     ]
   },
-  "related_competitors": [
-    {
-      "name": "string",
-      "website": "string — full URL",
-      "reason_flagged": "closest substitute | emerging threat",
-      "one_line_summary": "string"
+  "product": {
+    "feature_matrix": [
+      {
+        "feature": "string — feature or capability name",
+        "our_value": "string — brief capability of ${ourLabel}",
+        "their_value": "string — brief capability of ${compLabel}",
+        "edge": "us | them | neutral",
+        "our_detail": "string — fuller description of ${ourLabel}'s implementation",
+        "their_detail": "string — fuller description of ${compLabel}'s implementation",
+        "customer_quotes": [
+          {
+            "quote": "string — verbatim or near-verbatim from a review",
+            "source_label": "string — e.g. G2, Capterra",
+            "source_url": "string or null",
+            "date": "YYYY-MM-DD or null"
+          }
+        ],
+        "source_label": "string or null",
+        "source_url": "string or null"
+      }
+    ],
+    "roadmap_signals": [
+      {
+        "signal": "string — what this signals about their product direction",
+        "evidence": "string — the specific thing found (job title, changelog entry, press quote)",
+        "source_type": "job_posting | changelog | launch | press",
+        "source_label": "string",
+        "source_url": "string or null",
+        "date": "YYYY-MM-DD or null"
+      }
+    ],
+    "product_gaps": [
+      {
+        "gap": "string — the missing or weak capability",
+        "frequency": "common | occasional",
+        "example_complaint": "string — direct quote or close paraphrase from a review",
+        "source_label": "string",
+        "source_url": "string or null",
+        "date": "YYYY-MM-DD or null"
+      }
+    ]
+  },
+  "marketing": {
+    "positioning_analysis": {
+      "category_claimed": "string — what market category they claim to own",
+      "target_audience": "string — who they are explicitly targeting in messaging",
+      "overall_positioning": "string — 2-3 sentences summarising their positioning strategy",
+      "source_label": "string or null",
+      "source_url": "string or null"
+    },
+    "key_messages": [
+      {
+        "message": "string — the specific claim, quoted directly where possible",
+        "appears_in": "string — where found e.g. 'homepage hero', 'pricing page', 'Google ad'",
+        "source_label": "string",
+        "source_url": "string or null"
+      }
+    ],
+    "messaging_gaps": [
+      {
+        "gap": "string — what they conspicuously avoid or underplay",
+        "opportunity": "string — how ${ourContext} can own this space in messaging"
+      }
+    ],
+    "voice_of_customer": [
+      {
+        "quote": "string — verbatim from a review or post. Do NOT paraphrase.",
+        "source_platform": "string — e.g. G2, Capterra, Reddit",
+        "source_url": "string or null",
+        "date": "YYYY-MM-DD or null",
+        "sentiment": "positive | negative | mixed"
+      }
+    ],
+    "social_presence": {
+      "platforms": ["string — platforms they are active on"],
+      "content_themes": ["string — 3-5 recurring themes in their content"],
+      "tone": "string — describe their brand voice in 1-2 sentences",
+      "posting_frequency": "string or null — e.g. 'Daily on LinkedIn'",
+      "source_label": "string or null",
+      "source_url": "string or null"
     }
-  ]
+  }
 }
 
 Rules:
-- Return exactly 2 closest substitutes and 1 emerging threat in related_competitors (3 total).
-- positioning.insights: return 3-4 items.
-- strengths and weaknesses: return 4-6 items each.
-- feature_matrix: return 6-10 rows covering the most important capability comparisons.
-- sources in battle_card.sources: list every URL you actually visited, 5-10 total.
-- If you cannot find real data for a field, use null or [] — never fabricate.
+- overview.competitive_triggers: all significant events from the last 24 months, newest first. Minimum 3 where available.
+- overview.related_competitors: exactly 2 closest substitutes + 1 emerging threat (3 total).
+- sales.battle_cards: strengths and weaknesses 4-6 items each.
+- sales.objection_handling: 4-6 objections specific to competing against ${compLabel} when selling ${ourContext}.
+- sales.win_loss_stories: ONLY real stories found on G2, Capterra, Reddit, or credible press. If none found, return []. Do NOT fabricate.
+- product.feature_matrix: 6-10 rows. customer_quotes per row: only if a relevant verbatim review exists; otherwise [].
+- marketing.voice_of_customer: ONLY verbatim or near-verbatim quotes from review platforms. Min 3-5 where available. Do NOT paraphrase.
+- If data for any field is not available from a credible source, use null or [] — never fill with invented content.
 - Return ONLY this JSON object — nothing else.`;
 }
 
@@ -442,19 +543,18 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
     }
   }
 
-  // Write to research_outputs
-  // raw_sources: pull from battle_card.sources (the agent's collected source list)
-  const rawSources = parsed.battle_card?.sources || null;
-
+  // Write to research_outputs.
+  // New schema (v2): entire output stored in battle_card as { overview, sales, product, marketing }.
+  // competitive_triggers and related_competitors columns are backfilled for any legacy queries.
   const { error: writeError } = await supabase.from('research_outputs').insert({
     competitor_id: competitorId,
     job_id: jobId,
-    battle_card: parsed.battle_card,
-    competitive_triggers: parsed.competitive_triggers,
-    head_to_head: parsed.head_to_head,
-    related_competitors: parsed.related_competitors,
-    raw_sources: rawSources,
-    version: 1,
+    battle_card: parsed,
+    competitive_triggers: parsed.overview?.competitive_triggers || null,
+    head_to_head: null,
+    related_competitors: parsed.overview?.related_competitors || null,
+    raw_sources: null,
+    version: 2,
   });
 
   if (writeError) {
