@@ -89,6 +89,18 @@ Only use sources that meet one of these criteria:
 - The company's own verified social channels (Twitter/X, YouTube, official blog)
 Do NOT crawl or cite: content aggregators (Techmeme, AllTop), link farms, SEO content farms, anonymous wikis, forum roundup sites, or any source where the author and publication date cannot be clearly identified. If a source is ambiguous, skip it and note the claim as "unverified".
 
+RESEARCH SCOPE — CRITICAL:
+You are researching a specific PRODUCT, not a company. Every output across all four tabs must reflect this:
+- All feature analysis, positioning, messaging, voice of customer, and competitive triggers must refer specifically to the product being researched — not the company's other products, broader platform, or company-wide strategy.
+- Compare products, not companies.
+The only exceptions where company-level information is acceptable:
+- Support quality: only if support is shared company-wide and directly affects this product's users.
+- Pricing: only if the product is bundled within a broader company plan — explain which tier includes it and at what cost.
+- Financials: for PUBLIC companies only — reference annual revenue, stock ticker, stock performance, or earnings commentary that specifically names this product or its category. Do NOT mention VC funding rounds or venture backing for public companies. For PRIVATE companies, funding stage and total raised are acceptable only if they signal product investment level or financial stability risk.
+- Leadership or org changes: only if they directly affect the product team (e.g. a product lead departure, layoffs in this product's specific division).
+- Company-wide press: only if the coverage is specifically about this product or directly and materially impacts it.
+If in doubt, leave it out. Any company-level information that cannot be clearly and directly tied to the specific product must be omitted entirely.
+
 CITATION RULES — CRITICAL:
 - Every factual claim in your output must include a source_label and source_url.
 - If a claim comes from a provided URL (listed in this request), cite that exact URL.
@@ -149,15 +161,15 @@ function buildResearchPrompt(competitorName, productConfig, competitorInfo = {})
 
   return `Research the competitor "${compLabel}" thoroughly and produce a complete competitive intelligence report.${crawlSection}
 
-CRAWL ORDER:
+CRAWL ORDER — search for the specific product "${compLabel}", not the company broadly:
 1. Provided URLs above (highest priority, source of truth)
-2. ${competitorName} pricing page
-3. ${competitorName} product changelog / release notes
-4. G2 and Capterra reviews for ${competitorName}
-5. Google News: "${competitorName}" past 24 months
-6. LinkedIn company page for ${competitorName}
-7. ${competitorName} blog and official social channels
-8. SEC filings if ${competitorName} is a public company
+2. Pricing page specifically for "${compLabel}" — not a generic company pricing page
+3. "${compLabel}" changelog / release notes
+4. G2 and Capterra reviews specifically for "${compLabel}"
+5. Google News: "${compLabel}" past 24 months — only include results that are about this specific product
+6. LinkedIn company page for ${competitorName} — used for social presence section only
+7. ${competitorName} blog and official channels — only posts specifically about "${compLabel}"
+8. If ${competitorName} is a public company: earnings calls or SEC filings for commentary about this product's category only
 
 CITATION REQUIREMENT: Every single claim, data point, quote, and story must include source_label (publication or platform name) and source_url (direct URL). If a fact comes from a provided URL, cite that URL exactly. If you cannot verify a claim from a credible source, do NOT include it — return null or [] for that field rather than fabricating or guessing.
 
@@ -168,9 +180,9 @@ After gathering all information, return a single JSON object with EXACTLY this s
     "company_snapshot": {
       "founded": "4-digit year string or null",
       "employees": "string e.g. '500–1,000' or null",
-      "funding_arr": "string e.g. 'Series C · $120M raised' or null",
+      "funding_arr": "string — PRIVATE companies: funding stage + total raised only if it signals product investment level or stability risk (e.g. 'Series B · $45M raised'). PUBLIC companies: annual revenue or earnings commentary specific to this product or its category (e.g. '$2.4B ARR · NYSE:CRM'). Do NOT report VC funding rounds for public companies. Use null if not applicable or not product-relevant.",
       "hq": "string e.g. 'San Francisco, CA' or null",
-      "one_liner": "string — one sentence on what the company does",
+      "one_liner": "string — one sentence on what THIS SPECIFIC PRODUCT does, not what the company does broadly",
       "source_label": "string or null",
       "source_url": "string or null"
     },
@@ -201,7 +213,7 @@ After gathering all information, return a single JSON object with EXACTLY this s
       {
         "date": "YYYY-MM-DD or null",
         "type": "pricing_change | product_launch | funding | key_hire | bad_press",
-        "summary": "string — one sentence describing the event",
+        "summary": "string — one sentence describing the event as it relates to ${compLabel} specifically. Only include events that directly concern this product — not general company announcements.",
         "source_label": "string — publication or platform name",
         "source_url": "string or null"
       }
@@ -358,14 +370,16 @@ After gathering all information, return a single JSON object with EXACTLY this s
 }
 
 Rules:
-- overview.competitive_triggers: all significant events from the last 24 months, newest first. Minimum 3 where available.
-- overview.related_competitors: exactly 2 closest substitutes + 1 emerging threat (3 total).
-- sales.battle_cards: strengths and weaknesses 4-6 items each.
+- PRODUCT SCOPE: Every section, trigger, feature, quote, and story must be about ${compLabel} specifically. If a piece of information cannot be directly and clearly tied to this product, omit it — do not include company-wide context as filler.
+- overview.company_snapshot: one_liner must describe what ${compLabel} does, not what ${competitorName} the company does.
+- overview.competitive_triggers: only include events that directly concern ${compLabel}. All significant product-specific events from the last 24 months, newest first. Minimum 3 where available.
+- overview.related_competitors: exactly 2 closest substitutes + 1 emerging threat at the product level (3 total).
+- sales.battle_cards: strengths and weaknesses 4-6 items each, specific to ${compLabel}'s actual capabilities and user experience.
 - sales.objection_handling: 4-6 objections specific to competing against ${compLabel} when selling ${ourContext}.
-- sales.win_loss_stories: ONLY real stories found on G2, Capterra, Reddit, or credible press. If none found, return []. Do NOT fabricate.
-- product.feature_matrix: 6-10 rows. customer_quotes per row: only if a relevant verbatim review exists; otherwise [].
-- marketing.voice_of_customer: ONLY verbatim or near-verbatim quotes from review platforms. Min 3-5 where available. Do NOT paraphrase.
-- If data for any field is not available from a credible source, use null or [] — never fill with invented content.
+- sales.win_loss_stories: ONLY real stories from G2, Capterra, Reddit, or credible press that are explicitly about ${compLabel}. If none found, return []. Do NOT fabricate.
+- product.feature_matrix: 6-10 rows covering ${compLabel}'s specific features. customer_quotes: only include if a verbatim review quote about that specific feature exists; otherwise [].
+- marketing.voice_of_customer: ONLY verbatim or near-verbatim quotes from review platforms about ${compLabel} specifically. Min 3-5 where available. Do NOT paraphrase.
+- If data for any field is not available from a credible source for this specific product, use null or [] — never fill with invented or company-level content.
 - Return ONLY this JSON object — nothing else.`;
 }
 
