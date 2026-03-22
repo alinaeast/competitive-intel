@@ -224,6 +224,21 @@ export default function App() {
         setCompetitors((prev) => [inserted, ...prev]);
       } else {
         competitorId = existing.id;
+        // Patch any product fields that are missing on the existing record
+        // (e.g. competitor was created before product_url was added to the form)
+        const newAdditional = typeof entry !== 'string' ? (entry.additional_urls || []) : [];
+        const newNotes      = typeof entry !== 'string' ? (entry.notes || null) : null;
+        const patch = {};
+        if (!existing.website      && productUrl)                                          patch.website         = productUrl;
+        if (!existing.product_name && productName)                                         patch.product_name    = productName;
+        if ((!existing.additional_urls || existing.additional_urls.length === 0) && newAdditional.length > 0) patch.additional_urls = newAdditional;
+        if (!existing.notes        && newNotes)                                            patch.notes           = newNotes;
+        if (Object.keys(patch).length > 0) {
+          const { data: patched } = await supabase
+            .from('competitors').update(patch).eq('id', competitorId).select().single();
+          if (patched) setCompetitors((prev) => prev.map((c) => (c.id === competitorId ? patched : c)));
+          console.log('[queueResearch] patched existing competitor:', competitorId, patch);
+        }
       }
 
       // 3. Create research job
@@ -278,6 +293,14 @@ export default function App() {
       console.error('[queueResearch] unexpected error:', err);
       return null;
     }
+  };
+
+  // Called by MainPanel's MissingUrlBanner when the user saves a product URL
+  // for a competitor that was created without one.
+  const handleUpdateCompetitor = async (id, updates) => {
+    const { data: updated } = await supabase
+      .from('competitors').update(updates).eq('id', id).select().single();
+    if (updated) setCompetitors((prev) => prev.map((c) => (c.id === id ? updated : c)));
   };
 
   const handleDeleteCompetitor = (competitorId) => {
@@ -337,6 +360,7 @@ export default function App() {
           competitor={selectedCompetitor}
           job={selectedJob}
           onRunResearchFor={(name, website) => handleNewResearch({ competitorName: name, competitorWebsite: website })}
+          onUpdateCompetitor={handleUpdateCompetitor}
         />
       </div>
 
