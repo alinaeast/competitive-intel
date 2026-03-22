@@ -62,13 +62,39 @@ async function getProductConfig() {
 
 // ─── prompts ─────────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(config) {
+// competitorName and competitorInfo are now passed in so the system prompt can
+// open with an explicit RESEARCH TARGET block naming the exact product to research.
+function buildSystemPrompt(config, competitorName = '', competitorInfo = {}) {
   const { company_name, product_name, product_url, additional_urls, notes } = config;
+  const compProductName = competitorInfo.product_name || null;
+  const compUrl         = competitorInfo.url          || null;
+  const compLabel       = compProductName
+    ? `${compProductName} (by ${competitorName})`
+    : competitorName;
 
+  // ── RESEARCH TARGET — named at the top so it's the first thing Claude sees ──
+  let researchTarget = '';
+  if (competitorName) {
+    researchTarget += `RESEARCH TARGET — READ THIS BEFORE ANYTHING ELSE:\n`;
+    if (compProductName) {
+      researchTarget += `  Product being researched: ${compProductName}\n`;
+      researchTarget += `  Made by: ${competitorName}\n`;
+    } else {
+      researchTarget += `  Product being researched: ${competitorName}\n`;
+      researchTarget += `  Note: no specific product name was provided — treat "${competitorName}" as the product name and research it at the product level, not the company level.\n`;
+    }
+    if (compUrl) researchTarget += `  Primary product URL: ${compUrl}\n`;
+    if (competitorInfo.additional_urls?.length) {
+      researchTarget += `  Additional product URLs: ${competitorInfo.additional_urls.join(', ')}\n`;
+    }
+    researchTarget += `\n  Every section of your output must be about ${compLabel} specifically — not about ${competitorName} the company broadly, not their other products, not their platform.\n\n`;
+  }
+
+  // ── OUR PRODUCT context ──────────────────────────────────────────────────
   let ourProduct = '\n\nOUR PRODUCT: (no product details provided — use a general competitive analysis perspective)';
 
   if (company_name || product_name) {
-    ourProduct = '\n\nOUR PRODUCT CONTEXT:';
+    ourProduct = '\n\nOUR PRODUCT CONTEXT (for "us" columns and comparisons):';
     if (company_name)  ourProduct += `\n- Company: ${company_name}`;
     if (product_name)  ourProduct += `\n- Product name: ${product_name}`;
     if (product_url)   ourProduct += `\n- Primary URL: ${product_url}`;
@@ -76,7 +102,7 @@ function buildSystemPrompt(config) {
     if (notes)         ourProduct += `\n- Notes: ${notes}`;
   }
 
-  return `You are a competitive intelligence researcher. Your job is to research a specific product — not the company that makes it.
+  return `${researchTarget}You are a competitive intelligence researcher. Your job is to research a specific product — not the company that makes it.
 
 Every output you produce must answer this question: what is true about this specific product?
 
@@ -467,9 +493,21 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
   const productConfig = await getProductConfig();
   console.log(`[${jobId}] Product config:`, JSON.stringify(productConfig));
 
-  // Build initial messages
+  // Build prompts once (system prompt now knows which competitor product is being researched)
+  const systemPrompt   = buildSystemPrompt(productConfig, competitorName, competitorInfo);
+  const researchPrompt = buildResearchPrompt(competitorName, productConfig, competitorInfo);
+
+  // ── Log exactly what is being sent to Claude ─────────────────────────────
+  console.log(`\n[${jobId}] ══════════════════════════════════════════════════════`);
+  console.log(`[${jobId}] COMPETITOR INFO RECEIVED:`, JSON.stringify(competitorInfo));
+  console.log(`[${jobId}] ── SYSTEM PROMPT (full) ─────────────────────────────`);
+  console.log(systemPrompt);
+  console.log(`[${jobId}] ── RESEARCH PROMPT (first 600 chars) ───────────────`);
+  console.log(researchPrompt.slice(0, 600));
+  console.log(`[${jobId}] ══════════════════════════════════════════════════════\n`);
+
   const messages = [
-    { role: 'user', content: buildResearchPrompt(competitorName, productConfig, competitorInfo) },
+    { role: 'user', content: researchPrompt },
   ];
 
   console.log(`[${jobId}] Calling Claude...`);
@@ -481,7 +519,7 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8192,
-      system: buildSystemPrompt(productConfig),
+      system: systemPrompt,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages,
     });
@@ -550,7 +588,7 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
       const retryResponse = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 8192,
-        system: buildSystemPrompt(productConfig),
+        system: systemPrompt,   // same pre-built prompt — includes RESEARCH TARGET
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages,
       });
