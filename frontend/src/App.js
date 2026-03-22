@@ -239,16 +239,27 @@ export default function App() {
       if (!webhookUrl) {
         console.error('[queueResearch] REACT_APP_N8N_WEBHOOK_URL is not set');
       } else {
+        // Send every field under both naming conventions.
+        // n8n sometimes strips the "competitor_" prefix before forwarding
+        // to the agent, so we include both forms to guarantee delivery.
+        const additionalUrls = (typeof entry !== 'string' && entry.additional_urls) ? entry.additional_urls : [];
+        const notes          = (typeof entry !== 'string' && entry.notes)           ? entry.notes           : null;
         const payload = {
+          // required
           competitor_name: competitorName,
           job_id: job.id,
-          ...(typeof entry !== 'string' && {
-            competitor_product_name: entry.product_name || null,
-            competitor_url: entry.product_url || null,
-            competitor_additional_urls: entry.additional_urls || [],
-            competitor_notes: entry.notes || null,
-          }),
+          // un-prefixed (what the agent reads when n8n strips the prefix)
+          product_name:    productName,
+          url:             productUrl,
+          additional_urls: additionalUrls,
+          notes:           notes,
+          // prefixed (original format, kept for any n8n workflows that pass them through as-is)
+          competitor_product_name:    productName,
+          competitor_url:             productUrl,
+          competitor_additional_urls: additionalUrls,
+          competitor_notes:           notes,
         };
+        console.log('[queueResearch] webhook payload:', JSON.stringify(payload));
         fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
