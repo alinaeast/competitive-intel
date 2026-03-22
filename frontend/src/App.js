@@ -206,7 +206,13 @@ export default function App() {
         // 2a. Insert new competitor (website = primary product URL for display in sidebar)
         const { data: inserted, error: insertError } = await supabase
           .from('competitors')
-          .insert({ name: competitorName, website: productUrl, product_name: productName })
+          .insert({
+            name:            competitorName,
+            website:         productUrl,
+            product_name:    productName,
+            additional_urls: typeof entry !== 'string' ? (entry.additional_urls || []) : [],
+            notes:           typeof entry !== 'string' ? (entry.notes           || null) : null,
+          })
           .select()
           .single();
 

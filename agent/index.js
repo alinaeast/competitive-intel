@@ -499,17 +499,41 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
   if (!job) throw new Error('Job not found: ' + jobId);
   const competitorId = job.competitor_id;
 
+  // ── Fetch competitor row from Supabase — authoritative source of truth ──
+  // We do NOT rely on n8n passing product_name / url through the request body
+  // because n8n may silently drop or rename fields.  The frontend always writes
+  // to the competitors table before firing the webhook, so the DB is guaranteed
+  // to have the latest values.
+  const { data: competitorRow } = await supabase
+    .from('competitors')
+    .select('name, product_name, website, additional_urls, notes')
+    .eq('id', competitorId)
+    .single();
+
+  console.log(`[${jobId}] Competitor row from Supabase:`, JSON.stringify(competitorRow));
+
+  // Merge: DB values take priority; fall back to whatever arrived in the request body
+  const resolvedInfo = {
+    product_name:    competitorRow?.product_name    || competitorInfo.product_name    || null,
+    url:             competitorRow?.website         || competitorInfo.url             || null,
+    additional_urls: competitorRow?.additional_urls || competitorInfo.additional_urls || [],
+    notes:           competitorRow?.notes           || competitorInfo.notes           || null,
+  };
+
+  console.log(`[${jobId}] resolvedInfo (DB + body merged):`, JSON.stringify(resolvedInfo));
+
   // Fetch all product config values
   const productConfig = await getProductConfig();
   console.log(`[${jobId}] Product config:`, JSON.stringify(productConfig));
 
   // Build prompts once (system prompt now knows which competitor product is being researched)
-  const systemPrompt   = buildSystemPrompt(productConfig, competitorName, competitorInfo);
-  const researchPrompt = buildResearchPrompt(competitorName, productConfig, competitorInfo);
+  const systemPrompt   = buildSystemPrompt(productConfig, competitorName, resolvedInfo);
+  const researchPrompt = buildResearchPrompt(competitorName, productConfig, resolvedInfo);
 
   // ── Log exactly what is being sent to Claude ─────────────────────────────
   console.log(`\n[${jobId}] ══════════════════════════════════════════════════════`);
-  console.log(`[${jobId}] COMPETITOR INFO RECEIVED:`, JSON.stringify(competitorInfo));
+  console.log(`[${jobId}] COMPETITOR INFO FROM REQUEST BODY:`, JSON.stringify(competitorInfo));
+  console.log(`[${jobId}] RESOLVED INFO (used for prompts):`, JSON.stringify(resolvedInfo));
   console.log(`[${jobId}] ── SYSTEM PROMPT (full) ─────────────────────────────`);
   console.log(systemPrompt);
   console.log(`[${jobId}] ── RESEARCH PROMPT (first 600 chars) ───────────────`);
