@@ -158,7 +158,7 @@ export default function App() {
 
   // Single-competitor handler — used by HeadToHead "Run Full Research" button
   const handleNewResearch = async ({ competitorName, competitorWebsite }) => {
-    await queueResearch(competitorName, competitorWebsite || null);
+    await queueResearch({ name: competitorName, product_url: competitorWebsite || null });
   };
 
   // Multi-competitor handler — used by the New Research modal
@@ -166,7 +166,13 @@ export default function App() {
     console.log('[handleBatchResearch] entries:', entries);
     let firstId = null;
     for (const entry of entries) {
-      const id = await queueResearch(entry.name.trim(), entry.website?.trim() || null);
+      const id = await queueResearch({
+        name: entry.name.trim(),
+        product_name: entry.product_name?.trim() || null,
+        product_url: entry.product_url?.trim() || null,
+        additional_urls: (entry.additional_urls || []).filter((u) => u.trim()),
+        notes: entry.notes?.trim() || null,
+      });
       console.log('[handleBatchResearch] queued:', entry.name, '→ id:', id);
       if (!firstId && id) firstId = id;
     }
@@ -175,8 +181,12 @@ export default function App() {
     setShowModal(false);
   };
 
-  // Core logic: upsert competitor + create job + fire webhook; returns competitor id
-  const queueResearch = async (competitorName, website = null) => {
+  // Core logic: upsert competitor + create job + fire webhook; returns competitor id.
+  // entry = { name, product_name?, product_url?, additional_urls?, notes? }
+  const queueResearch = async (entry) => {
+    const competitorName = typeof entry === 'string' ? entry : entry.name;
+    const productUrl = typeof entry === 'string' ? null : entry.product_url || null;
+
     try {
       // 1. Look up existing competitor
       const { data: existing, error: lookupError } = await supabase
@@ -192,10 +202,10 @@ export default function App() {
 
       let competitorId;
       if (!existing) {
-        // 2a. Insert new competitor
+        // 2a. Insert new competitor (website = primary product URL for display in sidebar)
         const { data: inserted, error: insertError } = await supabase
           .from('competitors')
-          .insert({ name: competitorName, website })
+          .insert({ name: competitorName, website: productUrl })
           .select()
           .single();
 
@@ -223,15 +233,25 @@ export default function App() {
 
       setJobStatuses((prev) => ({ ...prev, [competitorId]: job }));
 
-      // 4. Fire webhook (non-blocking)
+      // 4. Fire webhook with all competitor details (non-blocking)
       const webhookUrl = process.env.REACT_APP_N8N_WEBHOOK_URL;
       if (!webhookUrl) {
         console.error('[queueResearch] REACT_APP_N8N_WEBHOOK_URL is not set');
       } else {
+        const payload = {
+          competitor_name: competitorName,
+          job_id: job.id,
+          ...(typeof entry !== 'string' && {
+            competitor_product_name: entry.product_name || null,
+            competitor_url: entry.product_url || null,
+            competitor_additional_urls: entry.additional_urls || [],
+            competitor_notes: entry.notes || null,
+          }),
+        };
         fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ competitor_name: competitorName, job_id: job.id }),
+          body: JSON.stringify(payload),
         }).catch((err) => console.error('[queueResearch] webhook fetch error:', err));
       }
 

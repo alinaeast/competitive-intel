@@ -36,28 +36,54 @@ async function getProductConfig() {
   const { data } = await supabase
     .from('config')
     .select('key, value')
-    .in('key', ['company_name', 'company_url', 'product_name', 'product_description']);
+    .in('key', [
+      'company_name',
+      'product_name',
+      'product_url',
+      'product_additional_urls',
+      'product_notes',
+      // legacy keys — kept for backwards compat with older config rows
+      'company_url',
+      'product_description',
+    ]);
 
   if (!data || data.length === 0) return {};
-  return Object.fromEntries(data.map((d) => [d.key, d.value]));
+  const m = Object.fromEntries(data.map((d) => [d.key, d.value]));
+
+  // Normalise: new key names take priority over legacy ones
+  return {
+    company_name: m.company_name || '',
+    product_name: m.product_name || '',
+    product_url: m.product_url || m.company_url || '',
+    additional_urls: m.product_additional_urls ? JSON.parse(m.product_additional_urls) : [],
+    notes: m.product_notes || m.product_description || '',
+  };
 }
 
 // ─── prompts ─────────────────────────────────────────────────────────────────
 
 function buildSystemPrompt(config) {
-  const { company_name, company_url, product_name, product_description } = config;
+  const { company_name, product_name, product_url, additional_urls, notes } = config;
 
   let ourProduct = '\n\nOUR PRODUCT: (no product details provided — use a general competitive analysis perspective)';
 
-  if (company_name || product_name || product_description) {
+  if (company_name || product_name) {
     ourProduct = '\n\nOUR PRODUCT CONTEXT:';
-    if (company_name) ourProduct += `\n- Company: ${company_name}`;
-    if (company_url)  ourProduct += `\n- Website: ${company_url}`;
-    if (product_name) ourProduct += `\n- Product name: ${product_name}`;
-    if (product_description) ourProduct += `\n- Description: ${product_description}`;
+    if (company_name)  ourProduct += `\n- Company: ${company_name}`;
+    if (product_name)  ourProduct += `\n- Product name: ${product_name}`;
+    if (product_url)   ourProduct += `\n- Primary URL: ${product_url}`;
+    if (additional_urls?.length) ourProduct += `\n- Additional URLs: ${additional_urls.join(', ')}`;
+    if (notes)         ourProduct += `\n- Notes: ${notes}`;
   }
 
   return `You are a competitive intelligence analyst. Your job is to research competitors thoroughly using web search and synthesize findings into structured JSON.${ourProduct}
+
+CITATION RULES — CRITICAL:
+- Every factual claim in your output must include a source_label and source_url.
+- If a claim comes from a provided URL (listed above), cite that exact URL.
+- If a claim comes from an external source, cite the full URL and include the publication or page date where available.
+- If a claim cannot be verified from any source you accessed, set source_label to "unverified" and source_url to null — never present unverified information as confirmed fact.
+- Do not group citations at the bottom. Every individual claim carries its own citation inline.
 
 OUTPUT FORMAT — CRITICAL:
 - You must respond with ONLY a valid JSON object. No explanations, no markdown, no text before or after the JSON.
@@ -74,30 +100,60 @@ function buildRetryPrompt() {
 Respond now with ONLY the raw JSON object. No explanation, no apology, no markdown. Start your response with { and end with }. Nothing else.`;
 }
 
-function buildResearchPrompt(competitorName, config) {
-  const { company_name, product_name } = config;
+function buildResearchPrompt(competitorName, productConfig, competitorInfo = {}) {
+  const { company_name, product_name, product_url, additional_urls: ourAdditional } = productConfig;
+  const {
+    product_name: compProductName,
+    url: compUrl,
+    additional_urls: compAdditional = [],
+    notes: compNotes,
+  } = competitorInfo;
 
   const ourLabel   = product_name || company_name || 'Us';
   const ourContext = product_name && company_name
     ? `${product_name} by ${company_name}`
     : product_name || company_name || 'our product';
 
-  return `Research the competitor "${competitorName}" thoroughly. Search for:
-1. Their homepage and about page
-2. Pricing page
-3. Recent product changelog or release notes
-4. G2 and Capterra reviews
-5. Google News mentions (last 12 months)
-6. LinkedIn company page
-7. Reddit and Hacker News discussions
-8. SEC filings (if they appear to be a public company)
+  const compLabel = compProductName
+    ? `${compProductName} by ${competitorName}`
+    : competitorName;
 
-Whenever you find a fact, note the URL where you found it so you can populate source_label and source_url fields.
+  // Build crawl lists
+  const ourUrls = [product_url, ...(ourAdditional || [])].filter(Boolean);
+  const compUrls = [compUrl, ...compAdditional].filter(Boolean);
+
+  let crawlSection = '';
+  if (compUrls.length > 0) {
+    crawlSection += `\n\nCOMPETITOR PROVIDED URLS — crawl these first, treat as source of truth:`;
+    compUrls.forEach((u, i) => { crawlSection += `\n${i + 1}. ${u}`; });
+    crawlSection += `\nIf any external source contradicts these URLs, the provided URLs win.`;
+  }
+  if (ourUrls.length > 0) {
+    crawlSection += `\n\nOUR PRODUCT PROVIDED URLS — use for the "us" column in head_to_head:`;
+    ourUrls.forEach((u, i) => { crawlSection += `\n${i + 1}. ${u}`; });
+  }
+  if (compNotes) {
+    crawlSection += `\n\nADDITIONAL NOTES FROM REQUESTER: ${compNotes}`;
+  }
+
+  return `Research the competitor "${compLabel}" thoroughly.${crawlSection}
+
+CRAWL ORDER:
+1. Provided URLs above (both competitor and our product) — highest priority
+2. ${competitorName} pricing page (if not already in provided URLs)
+3. ${competitorName} product changelog or release notes
+4. G2 and Capterra reviews for ${competitorName}
+5. Google News: "${competitorName}" mentions in the last 12 months
+6. LinkedIn company page for ${competitorName}
+7. Reddit and Hacker News discussions about ${competitorName}
+8. SEC filings if ${competitorName} appears to be a public company
+
+CITATION REQUIREMENT: For every fact you include in the output, record the exact source URL where you found it. Use the provided URLs as citation sources where applicable. For external sources, include the page URL and date. If you cannot find a source for a claim, mark it source_label: "unverified", source_url: null.
 
 After gathering all information, return a single JSON object with EXACTLY these top-level keys.
 
 IMPORTANT for head_to_head: the "us" column represents ${ourContext}.
-IMPORTANT for battle_card: objection handling and landmines must be specific to winning deals against ${competitorName} when selling ${ourContext}.
+IMPORTANT for battle_card: objection handling and landmines must be specific to winning deals against ${compLabel} when selling ${ourContext}.
 
 {
   "battle_card": {
@@ -209,7 +265,14 @@ app.post('/api/research', async (req, res) => {
   console.log('[/api/research] raw body type:', typeof req.body);
   console.log('[/api/research] body:', JSON.stringify(req.body, null, 2));
 
-  const { competitor_name, job_id } = req.body ?? {};
+  const {
+    competitor_name,
+    job_id,
+    competitor_product_name,
+    competitor_url,
+    competitor_additional_urls,
+    competitor_notes,
+  } = req.body ?? {};
 
   if (!competitor_name) {
     const msg = 'Missing required field: competitor_name';
@@ -227,15 +290,22 @@ app.post('/api/research', async (req, res) => {
   // Respond immediately so n8n / caller doesn't time out
   res.json({ status: 'accepted', job_id });
 
+  const competitorInfo = {
+    product_name: competitor_product_name || null,
+    url: competitor_url || null,
+    additional_urls: Array.isArray(competitor_additional_urls) ? competitor_additional_urls : [],
+    notes: competitor_notes || null,
+  };
+
   // Run research asynchronously
-  runResearch(competitor_name, job_id).catch(async (err) => {
+  runResearch(competitor_name, job_id, competitorInfo).catch(async (err) => {
     console.error('Research error:', err);
     await setJobStatus(job_id, 'failed').catch(() => {});
   });
 });
 
-async function runResearch(competitorName, jobId) {
-  console.log(`[${jobId}] Starting research for: ${competitorName}`);
+async function runResearch(competitorName, jobId, competitorInfo = {}) {
+  console.log(`[${jobId}] Starting research for: ${competitorName}`, JSON.stringify(competitorInfo));
 
   // Mark as running
   await setJobStatus(jobId, 'running');
@@ -256,7 +326,7 @@ async function runResearch(competitorName, jobId) {
 
   // Build initial messages
   const messages = [
-    { role: 'user', content: buildResearchPrompt(competitorName, productConfig) },
+    { role: 'user', content: buildResearchPrompt(competitorName, productConfig, competitorInfo) },
   ];
 
   console.log(`[${jobId}] Calling Claude...`);
