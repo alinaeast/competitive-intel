@@ -562,38 +562,12 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
   console.log(researchPrompt.slice(0, 600));
   console.log(`[${jobId}] ══════════════════════════════════════════════════════\n`);
 
-  const messages = [
-    { role: 'user', content: researchPrompt },
-  ];
+  console.log(`[${jobId}] Calling Claude with agentic loop...`);
 
-  console.log(`[${jobId}] Calling Claude...`);
   let finalText = '';
+  const messages = [{ role: 'user', content: researchPrompt }];
 
-  // ── Agentic loop ─────────────────────────────────────────────────────────
-  //
-  // web_search_20250305 is a SERVER-SIDE built-in tool.
-  // When Claude calls it, Anthropic's API executes the search automatically
-  // and returns BOTH the search request block (type: 'server_tool_use') AND
-  // the results block (type: 'web_search_tool_result') in the SAME
-  // response.content.
-  //
-  // Correct pattern:
-  //   1. Push full response.content as the assistant message.
-  //   2. If stop_reason === 'tool_use', loop — DO NOT add a user message
-  //      with tool results; they are already inside the assistant message.
-  //   3. If stop_reason === 'end_turn', collect text and exit.
-  //
-  // Previous bug: the code filtered for `block.type === 'tool_use'` which
-  // never matches 'server_tool_use', so toolResults was always [], and we
-  // pushed { role: 'user', content: [] } — an empty user message that put
-  // the conversation in an invalid state and triggered the 400 error on the
-  // next loop iteration.
-
-  const MAX_ITERATIONS = 25;
-  let iterations = 0;
-
-  while (iterations < MAX_ITERATIONS) {
-    iterations++;
+  for (let i = 0; i < 20; i++) {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 16000,
@@ -602,12 +576,7 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
       messages,
     });
 
-    const blockTypes = response.content.map((b) => b.type).join(', ');
-    console.log(`[${jobId}] Loop ${iterations}: stop_reason=${response.stop_reason} blocks=[${blockTypes}]`);
-
-    // Always push the FULL assistant response (includes server_tool_use +
-    // web_search_tool_result pairs for any searches Claude ran this turn)
-    messages.push({ role: 'assistant', content: response.content });
+    console.log(`[${jobId}] Iteration ${i + 1}: stop_reason=${response.stop_reason}`);
 
     if (response.stop_reason === 'end_turn') {
       for (const block of response.content) {
@@ -617,156 +586,49 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
     }
 
     if (response.stop_reason === 'tool_use') {
-      // Log each search for visibility
-      for (const block of response.content) {
-        if (block.type === 'server_tool_use' || block.type === 'tool_use') {
-          console.log(`[${jobId}]   → ${block.name}(${JSON.stringify(block.input ?? {}).slice(0, 140)})`);
-        }
+      messages.push({ role: 'assistant', content: response.content });
+      const toolResults = response.content
+        .filter((b) => b.type === 'tool_use' || b.type === 'server_tool_use')
+        .map((b) => ({
+          type: 'tool_result',
+          tool_use_id: b.id,
+          content: b.output ?? b.result ?? 'no result',
+        }));
+      if (toolResults.length > 0) {
+        messages.push({ role: 'user', content: toolResults });
       }
-      // Results are already in response.content — just loop, no user message
       continue;
     }
 
-    // Any other stop reason (max_tokens, stop_sequence, etc.) — grab
-    // whatever text Claude managed to produce before stopping
     for (const block of response.content) {
       if (block.type === 'text') finalText += block.text;
     }
-    console.log(`[${jobId}] Loop ended early: stop_reason=${response.stop_reason}`);
     break;
   }
 
-  if (iterations >= MAX_ITERATIONS) {
-    console.warn(`[${jobId}] Hit MAX_ITERATIONS (${MAX_ITERATIONS}) — forcing exit`);
-    // Collect any text that may exist in the last assistant message
-    const lastAsst = messages[messages.length - 1];
-    if (lastAsst?.role === 'assistant') {
-      for (const block of (Array.isArray(lastAsst.content) ? lastAsst.content : [])) {
-        if (block.type === 'text') finalText += block.text;
-      }
-    }
+  if (!finalText) {
+    throw new Error('Claude returned no text output');
   }
 
   console.log(`[${jobId}] Claude finished. Parsing output...`);
 
-  // ── JSON extraction helper ───────────────────────────────────────────────
   function extractJson(text) {
-    // 1. Strip markdown fences if present
     let s = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-    // 2. If there's leading non-JSON text, find the first { and trim to it
     const firstBrace = s.indexOf('{');
-    const lastBrace  = s.lastIndexOf('}');
+    const lastBrace = s.lastIndexOf('}');
     if (firstBrace > 0) s = s.slice(firstBrace);
     if (lastBrace !== -1 && lastBrace < s.length - 1) s = s.slice(0, lastBrace + 1);
     return JSON.parse(s);
   }
 
-  // ── First parse attempt ──────────────────────────────────────────────────
   let parsed;
-  let parseError;
   try {
     parsed = extractJson(finalText);
   } catch (err) {
-    parseError = err;
-    console.error(`[${jobId}] JSON parse error (attempt 1): ${err.message}`);
-    console.error(`[${jobId}] Raw Claude response (full):\n${finalText}`);
-  }
-
-  // ── Retry once with a stricter "JSON only" correction prompt ────────────
-  if (!parsed) {
-    console.log(`[${jobId}] Retrying with JSON-correction prompt...`);
-    try {
-      // Before appending the retry user message, ensure the conversation is
-      // valid: the Anthropic API requires every web_search tool_use block in
-      // an assistant message to be followed by a matching
-      // web_search_tool_result block in the very next user message.
-      // If the last assistant message contains any unresolved tool_use blocks
-      // (e.g. Claude hit max_tokens mid-search), inject placeholder results
-      // now so the conversation satisfies the API constraint.
-      const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.role === 'assistant') {
-        // Guard against both 'tool_use' (client-side) and 'server_tool_use'
-        // (web_search built-in). A server_tool_use block should already have a
-        // matching web_search_tool_result in the same assistant message; we only
-        // need to inject placeholders for any that are genuinely missing.
-        const allContent = Array.isArray(lastMsg.content) ? lastMsg.content : [];
-        const resolvedIds = new Set(
-          allContent
-            .filter((b) => b.type === 'web_search_tool_result' || b.type === 'tool_result')
-            .map((b) => b.tool_use_id)
-        );
-        const unresolved = allContent.filter(
-          (b) => (b.type === 'tool_use' || b.type === 'server_tool_use') && !resolvedIds.has(b.id)
-        );
-        if (unresolved.length > 0) {
-          console.log(`[${jobId}] Injecting ${unresolved.length} placeholder tool_result(s) before retry`);
-          messages.push({
-            role: 'user',
-            content: unresolved.map((b) => ({
-              type: 'web_search_tool_result',
-              tool_use_id: b.id,
-              content: 'Search result not available.',
-            })),
-          });
-          // Claude needs to respond to those tool results before we can ask
-          // the correction question. Send a minimal "continue" message and
-          // collect any partial text so we can try parsing again.
-          const bridgeResponse = await anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 16000,
-            system: systemPrompt,
-            messages,
-          });
-          messages.push({ role: 'assistant', content: bridgeResponse.content });
-          // Collect any text from the bridge response
-          let bridgeText = '';
-          for (const block of bridgeResponse.content) {
-            if (block.type === 'text') bridgeText += block.text;
-          }
-          if (bridgeText) {
-            // If the bridge response already has valid JSON, use it
-            try {
-              parsed = extractJson(bridgeText);
-              console.log(`[${jobId}] Bridge response contained valid JSON — using it.`);
-            } catch (_) {
-              // No valid JSON yet — proceed to formal retry below
-              console.log(`[${jobId}] Bridge response did not contain valid JSON — proceeding to retry prompt.`);
-            }
-          }
-        }
-      }
-
-      // Only send the correction prompt if we still don't have parsed JSON
-      if (!parsed) {
-        messages.push({ role: 'user', content: buildRetryPrompt() });
-      }
-
-      if (!parsed) {
-        const retryResponse = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 16000,
-          system: systemPrompt,
-          messages,
-        });
-
-        let retryText = '';
-        for (const block of retryResponse.content) {
-          if (block.type === 'text') retryText += block.text;
-        }
-
-        console.log(`[${jobId}] Retry response (first 300 chars): ${retryText.slice(0, 300)}`);
-        parsed = extractJson(retryText);
-        console.log(`[${jobId}] Retry parse succeeded.`);
-      }
-    } catch (retryErr) {
-      console.error(`[${jobId}] JSON parse error (attempt 2 / retry): ${retryErr.message}`);
-      // Mark job failed with a human-readable error, then bail out
-      await supabase
-        .from('research_jobs')
-        .update({ status: 'failed', error_message: `Claude returned non-JSON output after retry: ${retryErr.message}` })
-        .eq('id', jobId);
-      throw new Error(`Failed to parse Claude response as JSON after retry: ${retryErr.message}`);
-    }
+    console.error(`[${jobId}] JSON parse error: ${err.message}`);
+    console.error(`[${jobId}] Raw response: ${finalText.slice(0, 500)}`);
+    await supabase.from('research_jobs').update({ status: 'failed' }).eq('id', jobId);
+    throw new Error(`Failed to parse Claude response: ${err.message}`);
   }
 
   // Write to research_outputs.
