@@ -241,38 +241,19 @@ After gathering all information, return a single JSON object with EXACTLY this s
     "company_snapshot": {
       "founded": "4-digit year string or null",
       "employees": "string e.g. '500–1,000' or null",
-      "funding_arr": "string — PRIVATE companies: funding stage + total raised only if it signals product investment level or stability risk (e.g. 'Series B · $45M raised'). PUBLIC companies: annual revenue or earnings commentary specific to this product or its category (e.g. '$2.4B ARR · NYSE:CRM'). Do NOT report VC funding rounds for public companies. Use null if not applicable or not product-relevant.",
+      "funding_arr": "string — company-level. PRIVATE companies: funding stage + total raised (e.g. 'Series B · $45M raised'). PUBLIC companies: annual revenue or stock ticker (e.g. '$2.4B ARR · NYSE:CRM'). Do NOT report VC funding rounds for public companies. Use null if not applicable.",
       "hq": "string e.g. 'San Francisco, CA' or null",
-      "one_liner": "string — one sentence on what THIS SPECIFIC PRODUCT does. Source from the official product page or a credible institutional source. Do not use the company's general tagline if it describes the company broadly rather than this product.",
+      "one_liner": "string — one sentence on what the COMPANY does at the company level (not product-specific). Source from the official company 'About' page, SEC filing, or recognised press.",
       "source_label": "string or null — must be official company site, SEC filing, or recognised press. No personal blogs.",
       "source_url": "string or null"
     },
-    "product_overview": {
-      "one_sentence": "string — what this specific product is in one sentence. Source from official product page only.",
-      "problem_solved": "string — the core problem this product solves. Be specific to this product, not the company.",
-      "product_category": "string — the market/product category this belongs to, using standard industry terminology (e.g. 'Project Management', 'CRM', 'Product Analytics'). Source from official positioning or credible analyst categorisation.",
-      "source_label": "string or null",
-      "source_url": "string or null"
-    },
-    "product_launch": {
-      "launched": "string — when the product first launched or became publicly available, e.g. '2019' or 'March 2021'. Source from official pages only. Use null if not found.",
-      "ga_date": "YYYY-MM-DD or null — when the product reached general availability, if distinct from initial launch. Source from official changelog or press release only.",
-      "milestones": [
-        {
-          "date": "YYYY-MM-DD or null",
-          "milestone": "string — description of the major version, feature release, or significant update. Source from official changelog, release notes, or press release only.",
-          "source_label": "string or null — must be official company source or recognised press",
-          "source_url": "string or null"
-        }
-      ],
-      "source_label": "string or null",
-      "source_url": "string or null"
-    },
-    "target_customer": {
-      "company_size": "string — size of companies that typically buy this product, e.g. 'SMB (10–500 employees)', 'Enterprise (1,000+)', 'Startup to mid-market'. Source from official product page, G2 buyer data, or credible analyst report.",
-      "company_type": "string — types of companies or industries that commonly use this product, e.g. 'SaaS companies, agencies, consulting firms'. Source from official marketing or credible review data.",
-      "use_cases": ["string — 3-5 specific, named use cases this product is commonly used for. Use the exact terminology from the product's official documentation or positioning."],
-      "evaluation_context": "string — the typical context or trigger in which buyers evaluate this product (e.g. 'teams scaling past 50 people who have outgrown spreadsheets', 'companies replacing a legacy tool during a digital transformation'). Source from official positioning, analyst reports, or review platform data.",
+    "product_focus": {
+      "product_description": "string — one sentence on what this specific product does. Source from the official product page only.",
+      "launched": "string — when this product launched or reached general availability, e.g. '2019' or 'March 2021'. Source from official changelog, release notes, or product page only. Use null if no credible source confirms the date.",
+      "core_use_case": "string — the primary job this product does",
+      "target_customer": "string — who buys this: company size (e.g. 'SMB to mid-market, 50–500 employees'), typical buyer roles (e.g. 'Operations leads, PMs, team leads'), and the main use cases they solve for. Keep to 2–3 sentences. Source from official product page, G2 buyer data, or credible analyst data.",
+      "key_differentiators": ["string — 3-4 specific, verifiable differentiators. Use exact product terminology from official documentation."],
+      "problem_solved": "string — the specific pain this product addresses",
       "source_label": "string or null",
       "source_url": "string or null"
     },
@@ -286,13 +267,20 @@ After gathering all information, return a single JSON object with EXACTLY this s
           "source_label": "string or null",
           "source_url": "string or null"
         }
-      ]
+      ],
+      "recent_change": false,
+      "recent_change_note": "string or null — describe if recent_change is true",
+      "recent_change_date": "YYYY-MM-DD or null"
     },
-    "product_focus": {
-      "key_differentiators": ["string — 3-5 specific, verifiable differentiators for this product. Use exact terminology from official documentation. Each differentiator must be something this product actually claims or that review data confirms."],
-      "source_label": "string or null",
-      "source_url": "string or null"
-    }
+    "related_competitors": [
+      {
+        "name": "string — company name",
+        "product_name": "string or null",
+        "website": "string — full URL",
+        "tag": "closest substitute | emerging threat",
+        "summary": "string — one sentence on why this competitor is relevant"
+      }
+    ]
   },
   "sales": {
     "battle_cards": {
@@ -417,12 +405,12 @@ After gathering all information, return a single JSON object with EXACTLY this s
 Rules:
 - PRODUCT SCOPE: Every section, feature, and quote must be about ${compLabel} specifically. If a piece of information cannot be directly and clearly tied to this product, omit it entirely.
 - LANGUAGE PRECISION: Use the exact feature and product terminology from the company's official site. Do not genericise or invent synonyms.
-- overview.company_snapshot: Use only official company site, SEC filings, or recognised press (WSJ, Reuters, Bloomberg, Forbes, TechCrunch) as sources. No personal blogs, design blogs, or non-institutional sources. one_liner describes ${compLabel}, not the company.
-- overview.product_overview: Source one_sentence and product_category from the official product page only. Do not paraphrase the company's general tagline if it describes the company rather than this specific product.
-- overview.product_launch: Source ONLY from official changelog, release notes, press releases, or recognised press. Do NOT use third-party blogs or unverified dates. If launch date cannot be confirmed from an official source, set launched and ga_date to null and milestones to []. Include only milestones that represent major versions, significant feature releases, or platform-level changes — not minor patches.
-- overview.target_customer: Source company_size and company_type from the official product page, G2 buyer data, or credible analyst reports. use_cases must be named use cases from official documentation or positioning — not invented generalizations. evaluation_context should reflect real buying signals from official or review-platform sources.
-- overview.pricing: Source from the official pricing page for this specific product. Do not infer pricing from company-wide plans unless this product is only sold as part of a bundle.
-- overview.product_focus.key_differentiators: 3-5 items, each must be verifiable from official documentation or review data. Use exact product terminology.
+- overview.company_snapshot: company-level information only. one_liner describes what the COMPANY does, not this specific product. Use only official company site, SEC filings, or recognised press (WSJ, Reuters, Bloomberg, Forbes, TechCrunch). No personal blogs or non-institutional sources.
+- overview.product_focus.product_description: one sentence, sourced from the official product page only. Do not use the company's general tagline if it describes the company rather than this specific product.
+- overview.product_focus.launched: source ONLY from official changelog, release notes, press releases, or the official product page. Do NOT use third-party blogs, unverified dates, or indirect inference. Set to null if no credible official source confirms the date.
+- overview.product_focus.target_customer: include company size, typical buyer roles, and main use cases. Source from official product page, G2 buyer data, or credible analyst reports. Keep to 2–3 sentences.
+- overview.pricing: source from the official pricing page for this specific product. Do not infer pricing from company-wide plans unless this product is only sold as part of a bundle.
+- overview.related_competitors: exactly 2 closest substitutes + 1 emerging threat at the product level (3 total).
 - sales.battle_cards: strengths and weaknesses 4-6 items each, specific to ${compLabel}'s actual capabilities and user experience.
 - sales.objection_handling: 4-6 objections specific to competing against ${compLabel} when selling ${ourContext}.
 - product.feature_matrix: 6-10 rows covering ${compLabel}'s specific features. customer_quotes: return [] unless a real verbatim review quote specifically about that feature exists. Do NOT fabricate quotes.

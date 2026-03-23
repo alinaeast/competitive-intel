@@ -166,7 +166,10 @@ export default function MainPanel({ competitor, job, onRunResearchFor, onUpdateC
         {schema && (
           <>
             {activeTab === 0 && (
-              <Overview data={schema.overview} />
+              <Overview
+                data={schema.overview}
+                onRunResearch={(name, website) => onRunResearchFor && onRunResearchFor(name, website)}
+              />
             )}
             {activeTab === 1 && <Sales    data={schema.sales} />}
             {activeTab === 2 && <Product  data={schema.product} />}
