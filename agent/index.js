@@ -241,46 +241,33 @@ After gathering all information, return a single JSON object with EXACTLY this s
     "company_snapshot": {
       "founded": "4-digit year string or null",
       "employees": "string e.g. '500–1,000' or null",
-      "funding_arr": "string — company-level. PRIVATE companies: funding stage + total raised (e.g. 'Series B · $45M raised'). PUBLIC companies: annual revenue or stock ticker (e.g. '$2.4B ARR · NYSE:CRM'). Do NOT report VC funding rounds for public companies. Use null if not applicable.",
+      "funding_arr": "string — company-level. PUBLIC companies: stock ticker AND annual revenue both, e.g. 'NYSE:CRM · $2.4B FY2024 revenue'. Do NOT report funding rounds for public companies. PRIVATE companies: funding stage and total raised ONLY if it signals product-level investment, e.g. 'Series B · $45M raised'; use null if it does not signal meaningful product investment.",
       "hq": "string e.g. 'San Francisco, CA' or null",
       "one_liner": "string — one sentence on what the COMPANY does at the company level (not product-specific). Source from the official company 'About' page, SEC filing, or recognised press.",
       "source_label": "string or null — must be official company site, SEC filing, or recognised press. No personal blogs.",
       "source_url": "string or null"
     },
     "product_focus": {
-      "product_description": "string — one sentence on what this specific product does. Source from the official product page only.",
-      "launched": "string — when this product launched or reached general availability, e.g. '2019' or 'March 2021'. Source from official changelog, release notes, or product page only. Use null if no credible source confirms the date.",
-      "core_use_case": "string — the primary job this product does",
-      "target_customer": "string — who buys this: company size (e.g. 'SMB to mid-market, 50–500 employees'), typical buyer roles (e.g. 'Operations leads, PMs, team leads'), and the main use cases they solve for. Keep to 2–3 sentences. Source from official product page, G2 buyer data, or credible analyst data.",
-      "key_differentiators": ["string — 3-4 specific, verifiable differentiators. Use exact product terminology from official documentation."],
-      "problem_solved": "string — the specific pain this product addresses",
+      "product_description": "string — one sentence on what this specific product does. Source from the official product page only. Do not use the company's general tagline if it describes the company rather than this specific product.",
+      "target_customer": "string — who uses this specific product: company size (e.g. 'SMB to mid-market, 50–500 employees'), typical buyer roles (e.g. 'Operations leads, PMs, team leads'), common use cases they are solving for, and the context in which they typically evaluate this product. 2–3 sentences. Source from official product page, G2 buyer data, or credible analyst data only.",
+      "problem_solved": "string — the specific pain point this product addresses. Must be about this product specifically, not the company broadly.",
+      "key_differentiators": ["string — what makes this specific product distinct from alternatives. Must be product-specific — not platform-wide or company-level claims. 3–5 items. Use exact product terminology from official documentation. Each item must be verifiable from an official or credible source."],
       "source_label": "string or null",
       "source_url": "string or null"
     },
     "pricing": {
       "tiers": [
         {
-          "tier": "string — tier name e.g. Free, Pro, Enterprise",
+          "tier": "string — tier name e.g. Free, Pro, Business, Enterprise",
           "price": "string — e.g. '$49/seat/mo' or 'Custom'",
           "included": "string — key inclusions for this tier",
           "limitations": "string or null — notable limits or caps",
-          "source_label": "string or null",
-          "source_url": "string or null"
+          "includes_product": "boolean — true if the specific product being researched is available in this tier; false if it is not. Be explicit: if the product is only available on certain plans, mark only those plans true.",
+          "source_label": "string or null — must be the official pricing page for this product",
+          "source_url": "string or null — direct link to the official pricing page"
         }
-      ],
-      "recent_change": false,
-      "recent_change_note": "string or null — describe if recent_change is true",
-      "recent_change_date": "YYYY-MM-DD or null"
-    },
-    "related_competitors": [
-      {
-        "name": "string — company name",
-        "product_name": "string or null",
-        "website": "string — full URL",
-        "tag": "closest substitute | emerging threat",
-        "summary": "string — one sentence on why this competitor is relevant"
-      }
-    ]
+      ]
+    }
   },
   "sales": {
     "battle_cards": {
@@ -403,23 +390,62 @@ After gathering all information, return a single JSON object with EXACTLY this s
 }
 
 Rules:
-- PRODUCT SCOPE: Every section, feature, and quote must be about ${compLabel} specifically. If a piece of information cannot be directly and clearly tied to this product, omit it entirely.
-- LANGUAGE PRECISION: Use the exact feature and product terminology from the company's official site. Do not genericise or invent synonyms.
-- overview.company_snapshot: company-level information only. one_liner describes what the COMPANY does, not this specific product. Use only official company site, SEC filings, or recognised press (WSJ, Reuters, Bloomberg, Forbes, TechCrunch). No personal blogs or non-institutional sources.
-- overview.product_focus.product_description: one sentence, sourced from the official product page only. Do not use the company's general tagline if it describes the company rather than this specific product.
-- overview.product_focus.launched: source ONLY from official changelog, release notes, press releases, or the official product page. Do NOT use third-party blogs, unverified dates, or indirect inference. Set to null if no credible official source confirms the date.
-- overview.product_focus.target_customer: include company size, typical buyer roles, and main use cases. Source from official product page, G2 buyer data, or credible analyst reports. Keep to 2–3 sentences.
-- overview.pricing: source from the official pricing page for this specific product. Do not infer pricing from company-wide plans unless this product is only sold as part of a bundle.
-- overview.related_competitors: exactly 2 closest substitutes + 1 emerging threat at the product level (3 total).
-- sales.battle_cards: strengths and weaknesses 4-6 items each, specific to ${compLabel}'s actual capabilities and user experience.
-- sales.objection_handling: 4-6 objections specific to competing against ${compLabel} when selling ${ourContext}.
-- product.feature_matrix: 6-10 rows covering ${compLabel}'s specific features. customer_quotes: return [] unless a real verbatim review quote specifically about that feature exists. Do NOT fabricate quotes.
-- product.product_gaps: source ONLY from official company documentation, support pages, or known limitations pages. Do NOT use customer reviews, third-party commentary, or external opinion for this section. If no official-source gaps are found, return [].
-- marketing.voice_of_customer: ONLY verbatim text from real reviews on G2, Capterra, or equivalent. Do NOT paraphrase. Return [] if no real verbatim quotes are available.
-- NEVER use the competitor's blog posts as evidence for claims about the competitor.
-- NEVER fabricate, reconstruct, or invent any quote, review excerpt, or customer story. If the real data does not exist, return [] or null.
-- If data for any field is not available from a credible source for this specific product, use null or [] — never fill with invented or company-level content.
-- Return ONLY this JSON object — nothing else.`;
+
+PRODUCT SCOPE:
+- Every section, feature, quote, and data point must be about ${compLabel} specifically — not the company broadly, not their other products, not their platform.
+- If a piece of information cannot be directly and clearly tied to this specific product, omit it entirely.
+
+LANGUAGE PRECISION:
+- Use the exact feature and product terminology from the company's official website and documentation. Do not genericise or invent synonyms.
+- If the product calls a feature "Workspaces", use "Workspaces" — not "shared spaces" or "team areas".
+
+COMPANY SNAPSHOT:
+- Source exclusively from the competitor's official company website (About, Careers, Investor Relations pages) and SEC filings for public companies.
+- one_liner describes what the COMPANY does at the company level — not this specific product.
+- For public companies: include stock ticker AND annual revenue. Do not mention funding rounds.
+- For private companies: include funding stage and total raised ONLY if it signals product-level investment; otherwise use null.
+- No personal blogs, no non-institutional sources.
+
+PRODUCT FOCUS:
+- product_description: one sentence sourced from the official product page only. Do not use the company's general tagline.
+- target_customer: include company size, typical buyer roles, common use cases, and the context in which they typically evaluate this product. Source from official product page, G2 buyer data, or credible analyst data.
+- key_differentiators: must be product-specific claims, not company-wide or platform-level claims. Each must be verifiable from an official or credible third-party source.
+- problem_solved: must describe the specific pain this product addresses, not a general category problem.
+
+PRICING:
+- Source ONLY from the official pricing page for this specific product.
+- Do not infer pricing from company-wide plans unless this product is only sold as part of a bundle.
+- includes_product: be explicit — mark true only for tiers where the specific product being researched is actually available.
+
+QUOTES AND EVIDENCE — ABSOLUTE RULES:
+- All quotes and examples must be real, sourced, and specific to ${compLabel} — not the company overall or their broader product suite.
+- NEVER fabricate, reconstruct, paraphrase, or invent any quote, review excerpt, or customer story.
+- If a real verbatim quote is not available, return [] or null — never fill the field with invented or composite content.
+- customer_quotes in feature_matrix: return [] unless a real verbatim review quote specifically about that feature exists.
+- marketing.voice_of_customer: ONLY verbatim text from real reviews on G2, Capterra, or equivalent. Return [] if no real verbatim quotes are available.
+
+SOURCE HIERARCHY — apply in order:
+1. Provided URLs passed in this request (highest priority — treat as source of truth)
+2. Official company website and product pages
+3. Credible press: TechCrunch, Forbes, WSJ, Reuters, Bloomberg, Business Insider, CNBC, The Verge, Wired, VentureBeat
+4. Analyst and review platforms: G2, Capterra, Gartner, Forrester, IDC
+5. Regulatory filings: SEC EDGAR, Companies House, or equivalent
+
+NEVER USE:
+- Competitor blog posts as evidence for claims about the competitor (blog posts are marketing, not evidence)
+- Personal blogs, design blogs, community-submitted content, or content aggregators
+- Any source where the institutional author and publication date cannot be clearly identified
+- Forum roundup sites, SEO content farms, link farms, or anonymous wikis
+
+CITATIONS:
+- Every claim, data point, and quote must include a source_label and source_url.
+- source_url must be a direct, clickable link to the specific page — not a homepage.
+- Include the publication or page date in source_label where available, e.g. "G2 · March 2024".
+- If a claim cannot be verified from a credible source, set source_label to "unverified" and source_url to null.
+- product.product_gaps: source ONLY from official company documentation, support pages, or known limitations pages. Do NOT use customer reviews or third-party opinion for this section. Return [] if no official-source gaps are found.
+
+If data for any field is not available from a credible source for this specific product, use null or [] — never fill with invented or company-level content.
+Return ONLY this JSON object — nothing else.`;
 }
 
 // ─── /api/research ───────────────────────────────────────────────────────────

@@ -6,10 +6,10 @@ import { SourceBadge, SectionHeader, EmptySection, Card } from './Shared';
 function CompanySnapshot({ data }) {
   if (!data) return null;
   const stats = [
-    { label: 'Founded',       value: data.founded },
-    { label: 'Employees',     value: data.employees },
-    { label: 'Funding / ARR', value: data.funding_arr },
-    { label: 'HQ',            value: data.hq },
+    { label: 'Founded',           value: data.founded },
+    { label: 'Employees',         value: data.employees },
+    { label: 'Funding / Revenue', value: data.funding_arr },
+    { label: 'HQ',                value: data.hq },
   ].filter((s) => s.value);
 
   return (
@@ -46,43 +46,55 @@ function ProductFocus({ data }) {
   return (
     <section>
       <SectionHeader title="Product Focus" subtitle="What this product does and who it's for" />
-      <Card className="p-5 grid sm:grid-cols-2 gap-5">
-        {data.core_use_case && (
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Core Use Case</div>
-            <p className="text-sm text-gray-700">{data.core_use_case}</p>
-          </div>
+      <Card className="p-5">
+
+        {/* 1. One-liner product description — full width at top */}
+        {data.product_description && (
+          <p className="text-sm font-medium text-gray-800 mb-5 pb-4 border-b border-gray-100 leading-relaxed">
+            {data.product_description}
+          </p>
         )}
-        {data.target_customer && (
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Target Customer</div>
-            <p className="text-sm text-gray-700">{data.target_customer}</p>
-          </div>
-        )}
-        {data.problem_solved && (
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Problem Solved</div>
-            <p className="text-sm text-gray-700">{data.problem_solved}</p>
-          </div>
-        )}
-        {data.key_differentiators?.length > 0 && (
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Key Differentiators</div>
-            <ul className="flex flex-col gap-1.5">
-              {data.key_differentiators.map((d, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
-                  {d}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {(data.source_label || data.source_url) && (
-          <div className="sm:col-span-2 pt-3 border-t border-gray-100 flex justify-end">
-            <SourceBadge label={data.source_label} url={data.source_url} />
-          </div>
-        )}
+
+        <div className="grid sm:grid-cols-2 gap-5">
+
+          {/* 2. Target customer */}
+          {data.target_customer && (
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Target Customer</div>
+              <p className="text-sm text-gray-700">{data.target_customer}</p>
+            </div>
+          )}
+
+          {/* 3. Problem it solves */}
+          {data.problem_solved && (
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Problem Solved</div>
+              <p className="text-sm text-gray-700">{data.problem_solved}</p>
+            </div>
+          )}
+
+          {/* 4. Key differentiators — spans full width */}
+          {data.key_differentiators?.length > 0 && (
+            <div className="sm:col-span-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Key Differentiators</div>
+              <ul className="flex flex-col gap-1.5">
+                {data.key_differentiators.map((d, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                    {d}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(data.source_label || data.source_url) && (
+            <div className="sm:col-span-2 pt-3 border-t border-gray-100 flex justify-end">
+              <SourceBadge label={data.source_label} url={data.source_url} />
+            </div>
+          )}
+
+        </div>
       </Card>
     </section>
   );
@@ -112,8 +124,23 @@ function PricingSection({ data }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {tiers.map((t, i) => (
-                <tr key={i} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-800">{t.tier}</td>
+                <tr
+                  key={i}
+                  className={`transition-colors ${
+                    t.includes_product
+                      ? 'bg-indigo-50/60 hover:bg-indigo-50'
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <td className="px-4 py-3 font-medium text-gray-800">
+                    <span>{t.tier}</span>
+                    {t.includes_product && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        <span className="w-1 h-1 rounded-full bg-indigo-500" />
+                        Includes product
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-semibold text-indigo-700">{t.price}</td>
                   <td className="px-4 py-3 text-gray-600">{t.included || '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{t.limitations || '—'}</td>
@@ -132,7 +159,7 @@ function PricingSection({ data }) {
 
 // ── Overview tab ─────────────────────────────────────────────────────────────
 
-export default function Overview({ data, onRunResearch }) {
+export default function Overview({ data }) {
   if (!data) {
     return <EmptySection message="Run research to see the overview." />;
   }
