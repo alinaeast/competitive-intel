@@ -559,7 +559,7 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
   while (continueLoop) {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
+      max_tokens: 16000,
       system: systemPrompt,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages,
@@ -580,7 +580,7 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
         console.log(`[${jobId}] Tool call: ${block.name}(${JSON.stringify(block.input).slice(0, 120)})`);
         await delay(1500); // rate-limit courtesy delay
         toolResults.push({
-          type: 'tool_result',
+          type: 'web_search_tool_result',
           tool_use_id: block.id,
           content: 'Search executed.',
         });
@@ -624,24 +624,79 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
   if (!parsed) {
     console.log(`[${jobId}] Retrying with JSON-correction prompt...`);
     try {
-      messages.push({ role: 'user', content: buildRetryPrompt() });
-
-      const retryResponse = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8192,
-        system: systemPrompt,   // same pre-built prompt — includes RESEARCH TARGET
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages,
-      });
-
-      let retryText = '';
-      for (const block of retryResponse.content) {
-        if (block.type === 'text') retryText += block.text;
+      // Before appending the retry user message, ensure the conversation is
+      // valid: the Anthropic API requires every web_search tool_use block in
+      // an assistant message to be followed by a matching
+      // web_search_tool_result block in the very next user message.
+      // If the last assistant message contains any unresolved tool_use blocks
+      // (e.g. Claude hit max_tokens mid-search), inject placeholder results
+      // now so the conversation satisfies the API constraint.
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg?.role === 'assistant') {
+        const unresolved = (Array.isArray(lastMsg.content) ? lastMsg.content : [])
+          .filter((b) => b.type === 'tool_use');
+        if (unresolved.length > 0) {
+          console.log(`[${jobId}] Injecting ${unresolved.length} placeholder tool_result(s) before retry`);
+          messages.push({
+            role: 'user',
+            content: unresolved.map((b) => ({
+              type: 'web_search_tool_result',
+              tool_use_id: b.id,
+              content: 'Search result not available.',
+            })),
+          });
+          // Claude needs to respond to those tool results before we can ask
+          // the correction question. Send a minimal "continue" message and
+          // collect any partial text so we can try parsing again.
+          const bridgeResponse = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 16000,
+            system: systemPrompt,
+            tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+            messages,
+          });
+          messages.push({ role: 'assistant', content: bridgeResponse.content });
+          // Collect any text from the bridge response
+          let bridgeText = '';
+          for (const block of bridgeResponse.content) {
+            if (block.type === 'text') bridgeText += block.text;
+          }
+          if (bridgeText) {
+            // If the bridge response already has valid JSON, use it
+            try {
+              parsed = extractJson(bridgeText);
+              console.log(`[${jobId}] Bridge response contained valid JSON — using it.`);
+            } catch (_) {
+              // No valid JSON yet — proceed to formal retry below
+              console.log(`[${jobId}] Bridge response did not contain valid JSON — proceeding to retry prompt.`);
+            }
+          }
+        }
       }
 
-      console.log(`[${jobId}] Retry response (first 300 chars): ${retryText.slice(0, 300)}`);
-      parsed = extractJson(retryText);
-      console.log(`[${jobId}] Retry parse succeeded.`);
+      // Only send the correction prompt if we still don't have parsed JSON
+      if (!parsed) {
+        messages.push({ role: 'user', content: buildRetryPrompt() });
+      }
+
+      if (!parsed) {
+        const retryResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 16000,
+          system: systemPrompt,   // same pre-built prompt — includes RESEARCH TARGET
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages,
+        });
+
+        let retryText = '';
+        for (const block of retryResponse.content) {
+          if (block.type === 'text') retryText += block.text;
+        }
+
+        console.log(`[${jobId}] Retry response (first 300 chars): ${retryText.slice(0, 300)}`);
+        parsed = extractJson(retryText);
+        console.log(`[${jobId}] Retry parse succeeded.`);
+      }
     } catch (retryErr) {
       console.error(`[${jobId}] JSON parse error (attempt 2 / retry): ${retryErr.message}`);
       // Mark job failed with a human-readable error, then bail out
