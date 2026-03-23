@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import Overview  from './tabs/Overview';
 import Sales     from './tabs/Sales';
@@ -11,36 +11,67 @@ export default function MainPanel({ competitor, job, onRunResearchFor, onUpdateC
   const [activeTab, setActiveTab] = useState(0);
   const [output, setOutput] = useState(null);
 
-  // Reset tab and load output whenever the selected competitor changes
+  // ── Helper: fetch latest output for the current competitor ────────────────
+  const fetchOutput = useCallback(async (competitorId) => {
+    const { data, error } = await supabase
+      .from('research_outputs')
+      .select('*')
+      .eq('competitor_id', competitorId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) console.error('[MainPanel] fetchOutput error:', error);
+    else {
+      console.log('[MainPanel] fetchOutput result for', competitorId, ':', data ? 'found' : 'null');
+      setOutput(data || null);
+    }
+  }, []);
+
+  // ── Effect 1: reset + initial fetch when selected competitor changes ────────
+  // Depend on competitor.id only — not the full object.  App.js calls
+  // setCompetitors() on any Realtime event which creates a new object reference
+  // even for the same competitor; depending on the full object would reset output
+  // and re-fetch unnecessarily on every such update.
   useEffect(() => {
-    if (!competitor) { setOutput(null); return; }
+    if (!competitor?.id) { setOutput(null); return; }
     setActiveTab(0);
     setOutput(null);
+    fetchOutput(competitor.id);
+  }, [competitor?.id, fetchOutput]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const load = async () => {
-      const { data } = await supabase
-        .from('research_outputs')
-        .select('*')
-        .eq('competitor_id', competitor.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setOutput(data || null);
-    };
-    load();
+  // ── Effect 2: re-fetch when job transitions to complete ────────────────────
+  // This is the primary trigger for live updates.  Polling in App.js detects
+  // status changes every 5 s and updates the job prop; this effect re-fetches
+  // output the moment it sees status === 'complete'.
+  // Also fires on page load when the job is already complete, acting as a
+  // guaranteed fallback if the Realtime INSERT was missed.
+  useEffect(() => {
+    if (job?.status !== 'complete' || !competitor?.id) return;
+    console.log('[MainPanel] job complete — fetching output for', competitor.id);
+    fetchOutput(competitor.id);
+  }, [job?.status, competitor?.id, fetchOutput]);
 
-    // Realtime: pick up the new row the moment research completes
+  // ── Effect 3: Realtime subscription for live INSERT events ─────────────────
+  // Do NOT use payload.new — Supabase Realtime truncates payloads above ~1 MB
+  // and the battle_card JSONB column regularly exceeds that limit.  Instead,
+  // treat the event as a signal and re-fetch the full row from the DB.
+  useEffect(() => {
+    if (!competitor?.id) return;
     const channel = supabase
-      .channel(`output_${competitor.id}`)
+      .channel(`output_rt_${competitor.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'research_outputs', filter: `competitor_id=eq.${competitor.id}` },
-        (payload) => setOutput(payload.new)
+        () => {
+          console.log('[Realtime] research_outputs INSERT — re-fetching for', competitor.id);
+          fetchOutput(competitor.id);
+        }
       )
-      .subscribe();
-
+      .subscribe((status) => {
+        console.log('[Realtime] output channel status:', status, 'competitor:', competitor.id);
+      });
     return () => supabase.removeChannel(channel);
-  }, [competitor]);
+  }, [competitor?.id, fetchOutput]);
 
   if (!competitor) {
     return (
