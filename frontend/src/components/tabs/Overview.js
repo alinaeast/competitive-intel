@@ -1,15 +1,7 @@
 import React from 'react';
 import { SourceBadge, SectionHeader, EmptySection, Card } from './Shared';
 
-const TRIGGER_CONFIG = {
-  pricing_change: { label: 'Pricing Change', cls: 'bg-amber-100 text-amber-700 border-amber-200',  dot: 'bg-amber-500' },
-  product_launch: { label: 'Product Launch', cls: 'bg-blue-100 text-blue-700 border-blue-200',     dot: 'bg-blue-500'  },
-  funding:        { label: 'Funding',         cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  key_hire:       { label: 'Key Hire',        cls: 'bg-purple-100 text-purple-700 border-purple-200', dot: 'bg-purple-500' },
-  bad_press:      { label: 'Bad Press',       cls: 'bg-red-100 text-red-700 border-red-200',       dot: 'bg-red-500'   },
-};
-
-// ── Company Snapshot ─────────────────────────────────────────────────────────
+// ── Company Snapshot ──────────────────────────────────────────────────────────
 
 function CompanySnapshot({ data }) {
   if (!data) return null;
@@ -47,47 +39,161 @@ function CompanySnapshot({ data }) {
   );
 }
 
-// ── Product Focus ─────────────────────────────────────────────────────────────
+// ── Product Overview ──────────────────────────────────────────────────────────
 
-function ProductFocus({ data }) {
+function ProductOverview({ data }) {
   if (!data) return null;
   return (
     <section>
-      <SectionHeader title="Product Focus" subtitle="What this product does and who it's for" />
-      <Card className="p-5 grid sm:grid-cols-2 gap-5">
-        {data.core_use_case && (
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Core Use Case</div>
-            <p className="text-sm text-gray-700">{data.core_use_case}</p>
+      <SectionHeader title="Product Overview" />
+      <Card className="p-5">
+        {data.one_sentence && (
+          <p className="text-base font-medium text-gray-800 leading-relaxed mb-4">{data.one_sentence}</p>
+        )}
+        <div className="grid sm:grid-cols-2 gap-4">
+          {data.problem_solved && (
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Problem Solved</div>
+              <p className="text-sm text-gray-700 leading-relaxed">{data.problem_solved}</p>
+            </div>
+          )}
+          {data.product_category && (
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Product Category</div>
+              <p className="text-sm font-medium text-gray-800">{data.product_category}</p>
+            </div>
+          )}
+        </div>
+        {(data.source_label || data.source_url) && (
+          <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+            <SourceBadge label={data.source_label} url={data.source_url} />
           </div>
         )}
-        {data.target_customer && (
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Target Customer</div>
-            <p className="text-sm text-gray-700">{data.target_customer}</p>
+      </Card>
+    </section>
+  );
+}
+
+// ── Product Launch ────────────────────────────────────────────────────────────
+
+function ProductLaunch({ data }) {
+  const milestones = data?.milestones || [];
+  const hasInfo = data?.launched || data?.ga_date || milestones.length > 0;
+
+  return (
+    <section>
+      <SectionHeader title="Product Launch" subtitle="When it launched and major milestones since" />
+      {!hasInfo ? (
+        <EmptySection message="No launch data found." />
+      ) : (
+        <Card className="p-5 flex flex-col gap-4">
+          {(data.launched || data.ga_date) && (
+            <div className="grid sm:grid-cols-2 gap-4">
+              {data.launched && (
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Launched</div>
+                  <p className="text-sm font-medium text-gray-800">{data.launched}</p>
+                </div>
+              )}
+              {data.ga_date && (
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Generally Available</div>
+                  <p className="text-sm font-medium text-gray-800">{data.ga_date}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {milestones.length > 0 && (
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Major Milestones</div>
+              <div className="flex flex-col gap-0">
+                {milestones.map((m, i) => (
+                  <div key={i} className="flex gap-4 group">
+                    {/* Timeline spine */}
+                    <div className="flex flex-col items-center">
+                      <div className="w-2 h-2 rounded-full bg-indigo-400 mt-1 shrink-0" />
+                      {i < milestones.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1" />}
+                    </div>
+                    {/* Content */}
+                    <div className="pb-4 flex-1 min-w-0">
+                      {m.date && (
+                        <div className="text-xs text-gray-400 font-mono mb-0.5">{m.date}</div>
+                      )}
+                      <p className="text-sm text-gray-700 leading-relaxed">{m.milestone}</p>
+                      {(m.source_label || m.source_url) && (
+                        <div className="mt-1.5">
+                          <SourceBadge label={m.source_label} url={m.source_url} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(data.source_label || data.source_url) && (
+            <div className="pt-1 border-t border-gray-100 flex justify-end">
+              <SourceBadge label={data.source_label} url={data.source_url} />
+            </div>
+          )}
+        </Card>
+      )}
+    </section>
+  );
+}
+
+// ── Target Customer ───────────────────────────────────────────────────────────
+
+function TargetCustomer({ data }) {
+  if (!data) return null;
+  const useCases = data.use_cases || [];
+
+  return (
+    <section>
+      <SectionHeader title="Target Customer" subtitle="Who buys this product, what they use it for, and when they evaluate it" />
+      <Card className="p-5 flex flex-col gap-5">
+        {(data.company_size || data.company_type) && (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {data.company_size && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Company Size</div>
+                <p className="text-sm text-gray-700">{data.company_size}</p>
+              </div>
+            )}
+            {data.company_type && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Company Type</div>
+                <p className="text-sm text-gray-700">{data.company_type}</p>
+              </div>
+            )}
           </div>
         )}
-        {data.problem_solved && (
+
+        {useCases.length > 0 && (
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Problem Solved</div>
-            <p className="text-sm text-gray-700">{data.problem_solved}</p>
-          </div>
-        )}
-        {data.key_differentiators?.length > 0 && (
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Key Differentiators</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Common Use Cases</div>
             <ul className="flex flex-col gap-1.5">
-              {data.key_differentiators.map((d, i) => (
+              {useCases.map((uc, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                   <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
-                  {d}
+                  {uc}
                 </li>
               ))}
             </ul>
           </div>
         )}
+
+        {data.evaluation_context && (
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Evaluation Context</div>
+            <p className="text-sm text-gray-700 leading-relaxed">{data.evaluation_context}</p>
+          </div>
+        )}
+
         {(data.source_label || data.source_url) && (
-          <div className="sm:col-span-2 pt-3 border-t border-gray-100 flex justify-end">
+          <div className="pt-3 border-t border-gray-100 flex justify-end">
             <SourceBadge label={data.source_label} url={data.source_url} />
           </div>
         )}
@@ -103,22 +209,7 @@ function PricingSection({ data }) {
   const tiers = data.tiers || [];
   return (
     <section>
-      <SectionHeader title="Pricing">
-        {data.recent_change && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            Recent Change{data.recent_change_date ? ` · ${data.recent_change_date}` : ''}
-          </span>
-        )}
-      </SectionHeader>
-
-      {data.recent_change && data.recent_change_note && (
-        <div className="mb-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
-          <span className="mt-0.5 shrink-0">⚠</span>
-          <span>{data.recent_change_note}</span>
-        </div>
-      )}
-
+      <SectionHeader title="Pricing" />
       {tiers.length === 0 ? (
         <EmptySection message="No pricing data found." />
       ) : (
@@ -153,119 +244,52 @@ function PricingSection({ data }) {
   );
 }
 
-// ── Competitive Triggers ─────────────────────────────────────────────────────
+// ── Key Differentiators ───────────────────────────────────────────────────────
 
-function TriggerTag({ type }) {
-  const cfg = TRIGGER_CONFIG[type] || { label: type, cls: 'bg-gray-100 text-gray-600 border-gray-200', dot: 'bg-gray-400' };
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full border ${cfg.cls} shrink-0`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-      {cfg.label}
-    </span>
-  );
-}
-
-function TriggersTimeline({ triggers }) {
-  const items = (triggers || []).slice().sort((a, b) => {
-    if (!a.date) return 1;
-    if (!b.date) return -1;
-    return b.date.localeCompare(a.date);
-  });
+function KeyDifferentiators({ data }) {
+  if (!data) return null;
+  const diffs = data.key_differentiators || [];
 
   return (
     <section>
-      <SectionHeader title="Competitive Triggers" subtitle="Significant events — newest first" />
-      {items.length === 0 ? (
-        <EmptySection message="No competitive triggers found." />
+      <SectionHeader title="Key Differentiators" subtitle="What sets this product apart from alternatives" />
+      {diffs.length === 0 ? (
+        <EmptySection message="No differentiators data found." />
       ) : (
-        <div className="flex flex-col gap-0">
-          {items.map((item, i) => (
-            <div key={i} className="flex gap-4 group">
-              {/* Timeline spine */}
-              <div className="flex flex-col items-center">
-                <div className={`w-2.5 h-2.5 rounded-full mt-4 shrink-0 ${(TRIGGER_CONFIG[item.type] || {}).dot || 'bg-gray-400'}`} />
-                {i < items.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1" />}
-              </div>
-              {/* Content */}
-              <div className="pb-5 flex-1 min-w-0">
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <TriggerTag type={item.type} />
-                    {item.date && (
-                      <span className="text-xs text-gray-400">{item.date}</span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-700 leading-relaxed">{item.summary}</p>
-                  {(item.source_label || item.source_url) && (
-                    <div className="mt-2 flex justify-end">
-                      <SourceBadge label={item.source_label} url={item.source_url} />
-                    </div>
-                  )}
-                </div>
-              </div>
+        <Card className="p-5">
+          <ul className="flex flex-col gap-2">
+            {diffs.map((d, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                {d}
+              </li>
+            ))}
+          </ul>
+          {(data.source_label || data.source_url) && (
+            <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+              <SourceBadge label={data.source_label} url={data.source_url} />
             </div>
-          ))}
-        </div>
+          )}
+        </Card>
       )}
     </section>
   );
 }
 
-// ── Related Competitors ───────────────────────────────────────────────────────
+// ── Overview tab ──────────────────────────────────────────────────────────────
 
-const TAG_STYLES = {
-  'closest substitute': 'bg-orange-50 text-orange-700 border-orange-200',
-  'emerging threat':    'bg-red-50 text-red-700 border-red-200',
-};
-
-function RelatedCompetitors({ competitors, onRunResearch }) {
-  const items = competitors || [];
-  if (items.length === 0) return null;
-
-  return (
-    <section>
-      <SectionHeader title="Also in This Space" subtitle="Other competitors worth watching" />
-      <div className="grid sm:grid-cols-3 gap-4">
-        {items.map((c, i) => (
-          <Card key={i} className="p-4 flex flex-col gap-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="font-semibold text-gray-900 text-sm">{c.name}</div>
-                {c.product_name && (
-                  <div className="text-xs text-gray-500 mt-0.5">{c.product_name}</div>
-                )}
-              </div>
-              <span className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${TAG_STYLES[c.tag] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                {c.tag}
-              </span>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed flex-1">{c.summary}</p>
-            <button
-              onClick={() => onRunResearch && onRunResearch(c.name, c.website)}
-              className="w-full text-xs font-medium py-1.5 rounded-lg border border-indigo-300 text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
-            >
-              Run full research →
-            </button>
-          </Card>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ── Overview tab ─────────────────────────────────────────────────────────────
-
-export default function Overview({ data, onRunResearch }) {
+export default function Overview({ data }) {
   if (!data) {
     return <EmptySection message="Run research to see the overview." />;
   }
   return (
     <div className="flex flex-col gap-8">
-      <CompanySnapshot  data={data.company_snapshot} />
-      <ProductFocus     data={data.product_focus} />
-      <PricingSection   data={data.pricing} />
-      <TriggersTimeline triggers={data.competitive_triggers} />
-      <RelatedCompetitors competitors={data.related_competitors} onRunResearch={onRunResearch} />
+      <CompanySnapshot    data={data.company_snapshot} />
+      <ProductOverview    data={data.product_overview} />
+      <ProductLaunch      data={data.product_launch} />
+      <TargetCustomer     data={data.target_customer} />
+      <PricingSection     data={data.pricing} />
+      <KeyDifferentiators data={data.product_focus} />
     </div>
   );
 }

@@ -153,13 +153,6 @@ The company_snapshot section uses company-level data. For this section only, use
 - Recognised press: WSJ, Reuters, Bloomberg, Forbes, TechCrunch
 Do NOT use personal blogs, design blogs, or any non-institutional source for company_snapshot data.
 
-COMPETITIVE TRIGGERS — INCLUSION TEST:
-Before including any trigger, ask: "Does this event explicitly name or directly impact ${compLabel}?" If the answer is no — even if the event is interesting — do not include it.
-- A company-wide earnings report is only a trigger if it explicitly calls out this product's category or metrics.
-- A company-wide layoff is only a trigger if it affects the team or division responsible for this product.
-- A general press mention of the company is not a trigger unless it is specifically about this product.
-When in doubt, leave it out.
-
 LANGUAGE PRECISION:
 Use the exact product and feature terminology that appears on the company's official website and documentation. Do not paraphrase, genericise, or invent synonyms. If the product calls a feature "Workspaces", use "Workspaces" — not "shared spaces" or "team areas". Precision matters because sales reps use this output verbatim in customer conversations.
 
@@ -254,11 +247,32 @@ After gathering all information, return a single JSON object with EXACTLY this s
       "source_label": "string or null — must be official company site, SEC filing, or recognised press. No personal blogs.",
       "source_url": "string or null"
     },
-    "product_focus": {
-      "core_use_case": "string — the primary job their product does",
-      "target_customer": "string — who buys this: role, company size, industry",
-      "key_differentiators": ["string — 3-4 specific, verifiable differentiators"],
-      "problem_solved": "string — the specific pain their product addresses",
+    "product_overview": {
+      "one_sentence": "string — what this specific product is in one sentence. Source from official product page only.",
+      "problem_solved": "string — the core problem this product solves. Be specific to this product, not the company.",
+      "product_category": "string — the market/product category this belongs to, using standard industry terminology (e.g. 'Project Management', 'CRM', 'Product Analytics'). Source from official positioning or credible analyst categorisation.",
+      "source_label": "string or null",
+      "source_url": "string or null"
+    },
+    "product_launch": {
+      "launched": "string — when the product first launched or became publicly available, e.g. '2019' or 'March 2021'. Source from official pages only. Use null if not found.",
+      "ga_date": "YYYY-MM-DD or null — when the product reached general availability, if distinct from initial launch. Source from official changelog or press release only.",
+      "milestones": [
+        {
+          "date": "YYYY-MM-DD or null",
+          "milestone": "string — description of the major version, feature release, or significant update. Source from official changelog, release notes, or press release only.",
+          "source_label": "string or null — must be official company source or recognised press",
+          "source_url": "string or null"
+        }
+      ],
+      "source_label": "string or null",
+      "source_url": "string or null"
+    },
+    "target_customer": {
+      "company_size": "string — size of companies that typically buy this product, e.g. 'SMB (10–500 employees)', 'Enterprise (1,000+)', 'Startup to mid-market'. Source from official product page, G2 buyer data, or credible analyst report.",
+      "company_type": "string — types of companies or industries that commonly use this product, e.g. 'SaaS companies, agencies, consulting firms'. Source from official marketing or credible review data.",
+      "use_cases": ["string — 3-5 specific, named use cases this product is commonly used for. Use the exact terminology from the product's official documentation or positioning."],
+      "evaluation_context": "string — the typical context or trigger in which buyers evaluate this product (e.g. 'teams scaling past 50 people who have outgrown spreadsheets', 'companies replacing a legacy tool during a digital transformation'). Source from official positioning, analyst reports, or review platform data.",
       "source_label": "string or null",
       "source_url": "string or null"
     },
@@ -272,29 +286,13 @@ After gathering all information, return a single JSON object with EXACTLY this s
           "source_label": "string or null",
           "source_url": "string or null"
         }
-      ],
-      "recent_change": false,
-      "recent_change_note": "string or null — describe if recent_change is true",
-      "recent_change_date": "YYYY-MM-DD or null"
+      ]
     },
-    "competitive_triggers": [
-      {
-        "date": "YYYY-MM-DD or null",
-        "type": "pricing_change | product_launch | funding | key_hire | bad_press",
-        "summary": "string — one sentence describing the event. INCLUSION TEST: this event must explicitly name or directly impact ${compLabel}. If it is a company-wide announcement that does not explicitly mention this product, do not include it.",
-        "source_label": "string — publication or platform name",
-        "source_url": "string or null"
-      }
-    ],
-    "related_competitors": [
-      {
-        "name": "string — company name",
-        "product_name": "string or null",
-        "website": "string — full URL",
-        "tag": "closest substitute | emerging threat",
-        "summary": "string — one sentence on why this competitor is relevant"
-      }
-    ]
+    "product_focus": {
+      "key_differentiators": ["string — 3-5 specific, verifiable differentiators for this product. Use exact terminology from official documentation. Each differentiator must be something this product actually claims or that review data confirms."],
+      "source_label": "string or null",
+      "source_url": "string or null"
+    }
   },
   "sales": {
     "battle_cards": {
@@ -417,11 +415,14 @@ After gathering all information, return a single JSON object with EXACTLY this s
 }
 
 Rules:
-- PRODUCT SCOPE: Every section, trigger, feature, and quote must be about ${compLabel} specifically. If a piece of information cannot be directly and clearly tied to this product, omit it entirely.
+- PRODUCT SCOPE: Every section, feature, and quote must be about ${compLabel} specifically. If a piece of information cannot be directly and clearly tied to this product, omit it entirely.
 - LANGUAGE PRECISION: Use the exact feature and product terminology from the company's official site. Do not genericise or invent synonyms.
 - overview.company_snapshot: Use only official company site, SEC filings, or recognised press (WSJ, Reuters, Bloomberg, Forbes, TechCrunch) as sources. No personal blogs, design blogs, or non-institutional sources. one_liner describes ${compLabel}, not the company.
-- overview.competitive_triggers: Only include events that explicitly name or directly impact ${compLabel}. Apply the inclusion test before adding any trigger. If ambiguous, skip it. Newest first, last 24 months, minimum 3 where available.
-- overview.related_competitors: exactly 2 closest substitutes + 1 emerging threat at the product level (3 total).
+- overview.product_overview: Source one_sentence and product_category from the official product page only. Do not paraphrase the company's general tagline if it describes the company rather than this specific product.
+- overview.product_launch: Source ONLY from official changelog, release notes, press releases, or recognised press. Do NOT use third-party blogs or unverified dates. If launch date cannot be confirmed from an official source, set launched and ga_date to null and milestones to []. Include only milestones that represent major versions, significant feature releases, or platform-level changes — not minor patches.
+- overview.target_customer: Source company_size and company_type from the official product page, G2 buyer data, or credible analyst reports. use_cases must be named use cases from official documentation or positioning — not invented generalizations. evaluation_context should reflect real buying signals from official or review-platform sources.
+- overview.pricing: Source from the official pricing page for this specific product. Do not infer pricing from company-wide plans unless this product is only sold as part of a bundle.
+- overview.product_focus.key_differentiators: 3-5 items, each must be verifiable from official documentation or review data. Use exact product terminology.
 - sales.battle_cards: strengths and weaknesses 4-6 items each, specific to ${compLabel}'s actual capabilities and user experience.
 - sales.objection_handling: 4-6 objections specific to competing against ${compLabel} when selling ${ourContext}.
 - product.feature_matrix: 6-10 rows covering ${compLabel}'s specific features. customer_quotes: return [] unless a real verbatim review quote specifically about that feature exists. Do NOT fabricate quotes.
