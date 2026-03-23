@@ -130,78 +130,20 @@ function FeatureMatrix({ rows, ourLabel }) {
   );
 }
 
-// ── Roadmap Signals ───────────────────────────────────────────────────────────
-
-const SIGNAL_TYPE_CONFIG = {
-  job_posting: { label: 'Job Posting', cls: 'bg-purple-100 text-purple-700 border-purple-200' },
-  changelog:   { label: 'Changelog',   cls: 'bg-blue-100 text-blue-700 border-blue-200' },
-  launch:      { label: 'Launch',      cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  press:       { label: 'Press',       cls: 'bg-amber-100 text-amber-700 border-amber-200' },
-};
-
-function RoadmapSignals({ items }) {
-  const list = items || [];
-  return (
-    <section>
-      <SectionHeader title="Roadmap Signals" subtitle="Where their product is likely heading" />
-      {list.length === 0 ? (
-        <EmptySection message="No roadmap signals found." />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {list.map((item, i) => {
-            const cfg = SIGNAL_TYPE_CONFIG[item.source_type] || { label: item.source_type, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
-            return (
-              <Card key={i} className="p-4 flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>{cfg.label}</span>
-                  {item.date && <span className="text-[11px] text-gray-400">{item.date}</span>}
-                </div>
-                <p className="text-sm font-medium text-gray-800">{item.signal}</p>
-                {item.evidence && (
-                  <p className="text-xs text-gray-500 italic">{item.evidence}</p>
-                )}
-                {(item.source_label || item.source_url) && (
-                  <div className="flex justify-end">
-                    <SourceBadge label={item.source_label} url={item.source_url} />
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ── Product Gaps ──────────────────────────────────────────────────────────────
 
 function ProductGaps({ items }) {
   const list = items || [];
   return (
     <section>
-      <SectionHeader title="Product Gaps" subtitle="Recurring complaints from customer reviews" />
+      <SectionHeader title="Product Gaps" subtitle="Limitations sourced from official documentation" />
       {list.length === 0 ? (
-        <EmptySection message="No product gaps found from reviews." />
+        <EmptySection message="No documented product gaps found." />
       ) : (
         <div className="flex flex-col gap-3">
           {list.map((item, i) => (
             <Card key={i} className="p-4 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-semibold text-gray-800 flex-1">{item.gap}</p>
-                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                  item.frequency === 'common'
-                    ? 'bg-red-50 text-red-700 border-red-200'
-                    : 'bg-amber-50 text-amber-700 border-amber-200'
-                }`}>
-                  {item.frequency === 'common' ? 'Commonly reported' : 'Occasionally reported'}
-                </span>
-              </div>
-              {item.example_complaint && (
-                <blockquote className="border-l-4 border-gray-200 pl-3 text-sm text-gray-600 italic">
-                  "{item.example_complaint}"
-                </blockquote>
-              )}
+              <p className="text-sm font-semibold text-gray-800">{item.gap}</p>
               <div className="flex items-center justify-between flex-wrap gap-2">
                 {item.date && <span className="text-[11px] text-gray-400">{item.date}</span>}
                 <SourceBadge label={item.source_label} url={item.source_url} />
@@ -220,9 +162,8 @@ export default function Product({ data, ourLabel = 'Our Product' }) {
   if (!data) return <EmptySection message="Run research to see product data." />;
   return (
     <div className="flex flex-col gap-8">
-      <FeatureMatrix  rows={data.feature_matrix}  ourLabel={ourLabel} />
-      <RoadmapSignals items={data.roadmap_signals} />
-      <ProductGaps    items={data.product_gaps} />
+      <FeatureMatrix rows={data.feature_matrix} ourLabel={ourLabel} />
+      <ProductGaps   items={data.product_gaps} />
     </div>
   );
 }

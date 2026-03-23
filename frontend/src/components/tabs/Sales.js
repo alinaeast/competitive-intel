@@ -206,47 +206,6 @@ function LandminesToPlant({ items }) {
   );
 }
 
-// ── Win / Loss Stories ────────────────────────────────────────────────────────
-
-function WinLossStories({ items }) {
-  const list = items || [];
-  return (
-    <section>
-      <SectionHeader title="Win / Loss Stories" subtitle="Real accounts from public sources — not fabricated" />
-      {list.length === 0 ? (
-        <EmptySection message="No win/loss stories found from credible sources." />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {list.map((item, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex gap-4">
-              <div className={`shrink-0 mt-0.5 w-2 rounded-full self-stretch ${item.outcome === 'win' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-              <div className="flex-1 min-w-0 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${item.outcome === 'win' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                    {item.outcome === 'win' ? 'We Won' : 'We Lost'}
-                  </span>
-                  {item.source_platform && (
-                    <span className="text-[11px] text-gray-400">via {item.source_platform}</span>
-                  )}
-                  {item.date && (
-                    <span className="text-[11px] text-gray-400">{item.date}</span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed">"{item.story}"</p>
-                {item.source_url && (
-                  <div className="flex justify-end">
-                    <SourceBadge label={item.source_platform || 'Source'} url={item.source_url} />
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ── Sales tab ─────────────────────────────────────────────────────────────────
 
 export default function Sales({ data }) {
@@ -257,7 +216,6 @@ export default function Sales({ data }) {
       <ObjectionHandling items={data.objection_handling} />
       <LandminesToWatch  items={data.landmines_to_watch} />
       <LandminesToPlant  items={data.landmines_to_plant} />
-      <WinLossStories    items={data.win_loss_stories} />
     </div>
   );
 }

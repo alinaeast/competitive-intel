@@ -136,13 +136,38 @@ If you are unsure whether something belongs — leave it out.${ourProduct}
 SOURCE CREDIBILITY — CRITICAL:
 Only use sources that meet one of these criteria:
 - Official company websites (any domain owned by the company being researched)
-- Provided URLs passed in this request (always credible by definition)
+- Provided URLs passed in this request (always credible by definition — highest priority)
 - Recognised press: TechCrunch, Forbes, WSJ, Reuters, Bloomberg, Business Insider, CNBC, The Verge, Wired, Ars Technica, VentureBeat
 - Analyst/review platforms: G2, Capterra, Gartner, Forrester, IDC, Trustpilot
-- Professional networks: LinkedIn (company pages and verified profiles)
+- Professional networks: LinkedIn (company pages and verified profiles only)
 - Regulatory filings: SEC EDGAR, Companies House, or equivalent
 - The company's own verified social channels (Twitter/X, YouTube, official blog)
-Do NOT crawl or cite: content aggregators (Techmeme, AllTop), link farms, SEO content farms, anonymous wikis, forum roundup sites, or any source where the author and publication date cannot be clearly identified. If a source is ambiguous, skip it and note the claim as "unverified".
+Do NOT use: personal blogs, design blogs, community-submitted content, content aggregators (Techmeme, AllTop), link farms, SEO content farms, anonymous wikis, forum roundup sites, or any source where the institutional author and publication date cannot be clearly identified.
+Do NOT use the competitor's own blog posts as a source for claims about the competitor — blog posts are marketing, not evidence.
+If a source is ambiguous or the author cannot be identified as an institutional source, skip it entirely.
+
+COMPANY SNAPSHOT SOURCING:
+The company_snapshot section uses company-level data. For this section only, use:
+- Official company website ("About", "Careers", or investor relations pages)
+- SEC filings (for public companies)
+- Recognised press: WSJ, Reuters, Bloomberg, Forbes, TechCrunch
+Do NOT use personal blogs, design blogs, or any non-institutional source for company_snapshot data.
+
+COMPETITIVE TRIGGERS — INCLUSION TEST:
+Before including any trigger, ask: "Does this event explicitly name or directly impact ${compLabel}?" If the answer is no — even if the event is interesting — do not include it.
+- A company-wide earnings report is only a trigger if it explicitly calls out this product's category or metrics.
+- A company-wide layoff is only a trigger if it affects the team or division responsible for this product.
+- A general press mention of the company is not a trigger unless it is specifically about this product.
+When in doubt, leave it out.
+
+LANGUAGE PRECISION:
+Use the exact product and feature terminology that appears on the company's official website and documentation. Do not paraphrase, genericise, or invent synonyms. If the product calls a feature "Workspaces", use "Workspaces" — not "shared spaces" or "team areas". Precision matters because sales reps use this output verbatim in customer conversations.
+
+QUOTES AND CUSTOMER EVIDENCE — STRICT RULES:
+- Never fabricate, reconstruct, or invent customer quotes under any circumstances.
+- Never paraphrase a customer quote beyond minor punctuation cleanup — use near-verbatim text only.
+- If a real, sourced verbatim quote is not available for a field, return [] or null for that field.
+- Do not fill empty quote fields with invented examples, hypothetical phrasings, or composite summaries.
 
 CITATION RULES — CRITICAL:
 - Every factual claim in your output must include a source_label and source_url.
@@ -225,8 +250,8 @@ After gathering all information, return a single JSON object with EXACTLY this s
       "employees": "string e.g. '500–1,000' or null",
       "funding_arr": "string — PRIVATE companies: funding stage + total raised only if it signals product investment level or stability risk (e.g. 'Series B · $45M raised'). PUBLIC companies: annual revenue or earnings commentary specific to this product or its category (e.g. '$2.4B ARR · NYSE:CRM'). Do NOT report VC funding rounds for public companies. Use null if not applicable or not product-relevant.",
       "hq": "string e.g. 'San Francisco, CA' or null",
-      "one_liner": "string — one sentence on what THIS SPECIFIC PRODUCT does, not what the company does broadly",
-      "source_label": "string or null",
+      "one_liner": "string — one sentence on what THIS SPECIFIC PRODUCT does. Source from the official product page or a credible institutional source. Do not use the company's general tagline if it describes the company broadly rather than this product.",
+      "source_label": "string or null — must be official company site, SEC filing, or recognised press. No personal blogs.",
       "source_url": "string or null"
     },
     "product_focus": {
@@ -256,7 +281,7 @@ After gathering all information, return a single JSON object with EXACTLY this s
       {
         "date": "YYYY-MM-DD or null",
         "type": "pricing_change | product_launch | funding | key_hire | bad_press",
-        "summary": "string — one sentence describing the event as it relates to ${compLabel} specifically. Only include events that directly concern this product — not general company announcements.",
+        "summary": "string — one sentence describing the event. INCLUSION TEST: this event must explicitly name or directly impact ${compLabel}. If it is a company-wide announcement that does not explicitly mention this product, do not include it.",
         "source_label": "string — publication or platform name",
         "source_url": "string or null"
       }
@@ -318,15 +343,6 @@ After gathering all information, return a single JSON object with EXACTLY this s
         "source_url": "string or null"
       }
     ],
-    "win_loss_stories": [
-      {
-        "outcome": "win | loss",
-        "story": "string — direct quote or very close paraphrase. Do NOT invent or pad.",
-        "source_platform": "string — e.g. G2, Capterra, Reddit",
-        "source_url": "string — direct link to the review or post",
-        "date": "YYYY-MM-DD or null"
-      }
-    ]
   },
   "product": {
     "feature_matrix": [
@@ -339,7 +355,7 @@ After gathering all information, return a single JSON object with EXACTLY this s
         "their_detail": "string — fuller description of ${compLabel}'s implementation",
         "customer_quotes": [
           {
-            "quote": "string — verbatim or near-verbatim from a review",
+            "quote": "string — verbatim text from a real, sourced review. Do NOT fabricate, reconstruct, or paraphrase. If no real verbatim quote exists for this feature, return [].",
             "source_label": "string — e.g. G2, Capterra",
             "source_url": "string or null",
             "date": "YYYY-MM-DD or null"
@@ -349,23 +365,11 @@ After gathering all information, return a single JSON object with EXACTLY this s
         "source_url": "string or null"
       }
     ],
-    "roadmap_signals": [
-      {
-        "signal": "string — what this signals about their product direction",
-        "evidence": "string — the specific thing found (job title, changelog entry, press quote)",
-        "source_type": "job_posting | changelog | launch | press",
-        "source_label": "string",
-        "source_url": "string or null",
-        "date": "YYYY-MM-DD or null"
-      }
-    ],
     "product_gaps": [
       {
-        "gap": "string — the missing or weak capability",
-        "frequency": "common | occasional",
-        "example_complaint": "string — direct quote or close paraphrase from a review",
-        "source_label": "string",
-        "source_url": "string or null",
+        "gap": "string — a missing or weak capability, sourced ONLY from the company's own official documentation, support pages, known limitations pages, or release notes. Do NOT source from customer reviews, third-party blogs, or any external opinion. Only include gaps that the company itself acknowledges or that are evident from the absence of a feature in their official documentation.",
+        "source_label": "string — must be official company source (e.g. 'Asana Support', 'Official Docs')",
+        "source_url": "string or null — link to the specific support page, doc page, or release note",
         "date": "YYYY-MM-DD or null"
       }
     ]
@@ -394,7 +398,7 @@ After gathering all information, return a single JSON object with EXACTLY this s
     ],
     "voice_of_customer": [
       {
-        "quote": "string — verbatim from a review or post. Do NOT paraphrase.",
+        "quote": "string — verbatim text copied directly from a real review on G2, Capterra, or a credible platform. Do NOT paraphrase, summarise, or reconstruct. If a real verbatim quote is not available, return [] for the entire voice_of_customer array.",
         "source_platform": "string — e.g. G2, Capterra, Reddit",
         "source_url": "string or null",
         "date": "YYYY-MM-DD or null",
@@ -413,15 +417,18 @@ After gathering all information, return a single JSON object with EXACTLY this s
 }
 
 Rules:
-- PRODUCT SCOPE: Every section, trigger, feature, quote, and story must be about ${compLabel} specifically. If a piece of information cannot be directly and clearly tied to this product, omit it — do not include company-wide context as filler.
-- overview.company_snapshot: one_liner must describe what ${compLabel} does, not what ${competitorName} the company does.
-- overview.competitive_triggers: only include events that directly concern ${compLabel}. All significant product-specific events from the last 24 months, newest first. Minimum 3 where available.
+- PRODUCT SCOPE: Every section, trigger, feature, and quote must be about ${compLabel} specifically. If a piece of information cannot be directly and clearly tied to this product, omit it entirely.
+- LANGUAGE PRECISION: Use the exact feature and product terminology from the company's official site. Do not genericise or invent synonyms.
+- overview.company_snapshot: Use only official company site, SEC filings, or recognised press (WSJ, Reuters, Bloomberg, Forbes, TechCrunch) as sources. No personal blogs, design blogs, or non-institutional sources. one_liner describes ${compLabel}, not the company.
+- overview.competitive_triggers: Only include events that explicitly name or directly impact ${compLabel}. Apply the inclusion test before adding any trigger. If ambiguous, skip it. Newest first, last 24 months, minimum 3 where available.
 - overview.related_competitors: exactly 2 closest substitutes + 1 emerging threat at the product level (3 total).
 - sales.battle_cards: strengths and weaknesses 4-6 items each, specific to ${compLabel}'s actual capabilities and user experience.
 - sales.objection_handling: 4-6 objections specific to competing against ${compLabel} when selling ${ourContext}.
-- sales.win_loss_stories: ONLY real stories from G2, Capterra, Reddit, or credible press that are explicitly about ${compLabel}. If none found, return []. Do NOT fabricate.
-- product.feature_matrix: 6-10 rows covering ${compLabel}'s specific features. customer_quotes: only include if a verbatim review quote about that specific feature exists; otherwise [].
-- marketing.voice_of_customer: ONLY verbatim or near-verbatim quotes from review platforms about ${compLabel} specifically. Min 3-5 where available. Do NOT paraphrase.
+- product.feature_matrix: 6-10 rows covering ${compLabel}'s specific features. customer_quotes: return [] unless a real verbatim review quote specifically about that feature exists. Do NOT fabricate quotes.
+- product.product_gaps: source ONLY from official company documentation, support pages, or known limitations pages. Do NOT use customer reviews, third-party commentary, or external opinion for this section. If no official-source gaps are found, return [].
+- marketing.voice_of_customer: ONLY verbatim text from real reviews on G2, Capterra, or equivalent. Do NOT paraphrase. Return [] if no real verbatim quotes are available.
+- NEVER use the competitor's blog posts as evidence for claims about the competitor.
+- NEVER fabricate, reconstruct, or invent any quote, review excerpt, or customer story. If the real data does not exist, return [] or null.
 - If data for any field is not available from a credible source for this specific product, use null or [] — never fill with invented or company-level content.
 - Return ONLY this JSON object — nothing else.`;
 }
