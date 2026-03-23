@@ -715,7 +715,6 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
             model: 'claude-sonnet-4-20250514',
             max_tokens: 16000,
             system: systemPrompt,
-            tools: [{ type: 'web_search_20250305', name: 'web_search' }],
             messages,
           });
           messages.push({ role: 'assistant', content: bridgeResponse.content });
@@ -746,8 +745,7 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
         const retryResponse = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 16000,
-          system: systemPrompt,   // same pre-built prompt — includes RESEARCH TARGET
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          system: systemPrompt,
           messages,
         });
 
