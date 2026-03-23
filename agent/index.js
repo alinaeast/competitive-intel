@@ -569,9 +569,31 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
   console.log(`[${jobId}] Calling Claude...`);
   let finalText = '';
 
-  // Agentic loop — Claude may call web_search multiple times
-  let continueLoop = true;
-  while (continueLoop) {
+  // ── Agentic loop ─────────────────────────────────────────────────────────
+  //
+  // web_search_20250305 is a SERVER-SIDE built-in tool.
+  // When Claude calls it, Anthropic's API executes the search automatically
+  // and returns BOTH the search request block (type: 'server_tool_use') AND
+  // the results block (type: 'web_search_tool_result') in the SAME
+  // response.content.
+  //
+  // Correct pattern:
+  //   1. Push full response.content as the assistant message.
+  //   2. If stop_reason === 'tool_use', loop — DO NOT add a user message
+  //      with tool results; they are already inside the assistant message.
+  //   3. If stop_reason === 'end_turn', collect text and exit.
+  //
+  // Previous bug: the code filtered for `block.type === 'tool_use'` which
+  // never matches 'server_tool_use', so toolResults was always [], and we
+  // pushed { role: 'user', content: [] } — an empty user message that put
+  // the conversation in an invalid state and triggered the 400 error on the
+  // next loop iteration.
+
+  const MAX_ITERATIONS = 25;
+  let iterations = 0;
+
+  while (iterations < MAX_ITERATIONS) {
+    iterations++;
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 16000,
@@ -580,33 +602,48 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
       messages,
     });
 
-    // Collect assistant message content
+    const blockTypes = response.content.map((b) => b.type).join(', ');
+    console.log(`[${jobId}] Loop ${iterations}: stop_reason=${response.stop_reason} blocks=[${blockTypes}]`);
+
+    // Always push the FULL assistant response (includes server_tool_use +
+    // web_search_tool_result pairs for any searches Claude ran this turn)
     messages.push({ role: 'assistant', content: response.content });
 
     if (response.stop_reason === 'end_turn') {
       for (const block of response.content) {
         if (block.type === 'text') finalText += block.text;
       }
-      continueLoop = false;
-    } else if (response.stop_reason === 'tool_use') {
-      const toolResults = [];
+      break;
+    }
+
+    if (response.stop_reason === 'tool_use') {
+      // Log each search for visibility
       for (const block of response.content) {
-        if (block.type !== 'tool_use') continue;
-        console.log(`[${jobId}] Tool call: ${block.name}(${JSON.stringify(block.input).slice(0, 120)})`);
-        await delay(1500); // rate-limit courtesy delay
-        toolResults.push({
-          type: 'web_search_tool_result',
-          tool_use_id: block.id,
-          content: 'Search executed.',
-        });
+        if (block.type === 'server_tool_use' || block.type === 'tool_use') {
+          console.log(`[${jobId}]   → ${block.name}(${JSON.stringify(block.input ?? {}).slice(0, 140)})`);
+        }
       }
-      messages.push({ role: 'user', content: toolResults });
-    } else {
-      // max_tokens or other stop — extract partial text
-      for (const block of response.content) {
+      // Results are already in response.content — just loop, no user message
+      continue;
+    }
+
+    // Any other stop reason (max_tokens, stop_sequence, etc.) — grab
+    // whatever text Claude managed to produce before stopping
+    for (const block of response.content) {
+      if (block.type === 'text') finalText += block.text;
+    }
+    console.log(`[${jobId}] Loop ended early: stop_reason=${response.stop_reason}`);
+    break;
+  }
+
+  if (iterations >= MAX_ITERATIONS) {
+    console.warn(`[${jobId}] Hit MAX_ITERATIONS (${MAX_ITERATIONS}) — forcing exit`);
+    // Collect any text that may exist in the last assistant message
+    const lastAsst = messages[messages.length - 1];
+    if (lastAsst?.role === 'assistant') {
+      for (const block of (Array.isArray(lastAsst.content) ? lastAsst.content : [])) {
         if (block.type === 'text') finalText += block.text;
       }
-      continueLoop = false;
     }
   }
 
@@ -648,8 +685,19 @@ async function runResearch(competitorName, jobId, competitorInfo = {}) {
       // now so the conversation satisfies the API constraint.
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'assistant') {
-        const unresolved = (Array.isArray(lastMsg.content) ? lastMsg.content : [])
-          .filter((b) => b.type === 'tool_use');
+        // Guard against both 'tool_use' (client-side) and 'server_tool_use'
+        // (web_search built-in). A server_tool_use block should already have a
+        // matching web_search_tool_result in the same assistant message; we only
+        // need to inject placeholders for any that are genuinely missing.
+        const allContent = Array.isArray(lastMsg.content) ? lastMsg.content : [];
+        const resolvedIds = new Set(
+          allContent
+            .filter((b) => b.type === 'web_search_tool_result' || b.type === 'tool_result')
+            .map((b) => b.tool_use_id)
+        );
+        const unresolved = allContent.filter(
+          (b) => (b.type === 'tool_use' || b.type === 'server_tool_use') && !resolvedIds.has(b.id)
+        );
         if (unresolved.length > 0) {
           console.log(`[${jobId}] Injecting ${unresolved.length} placeholder tool_result(s) before retry`);
           messages.push({
